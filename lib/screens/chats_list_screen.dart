@@ -122,6 +122,12 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
                   List<dynamic> msgs = _extractList(decoded);
 
                   if (msgs.isNotEmpty) {
+                    // Only show chats where the logged-in user has sent at least one message
+                    final hasUserMessage = msgs.any(
+                      (m) => m["sender"]?.toString().toLowerCase() == "user",
+                    );
+                    if (!hasUserMessage) return;
+
                     final lastMsg = msgs.last;
                     final lastMsgText = lastMsg["message"]?.toString() ?? "";
                     final lastMsgSender = lastMsg["sender"]?.toString() ?? "";
@@ -138,7 +144,8 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
                           "lastMessage": lastMsgText,
                           "lastSender": lastMsgSender,
                           "timestamp": timestamp,
-                          "isUnread": lastMsgSender.toLowerCase() != "admin",
+                          // Pending reply = last message is from user (admin hasn't replied yet)
+                          "isUnread": lastMsgSender.toLowerCase() == "user",
                         });
 
                         // Sort immediately to show in correct order
@@ -153,6 +160,7 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
                       });
                     }
                   }
+
                 } else {
                    debugPrint("Failed to load messages for $module $id: ${res.statusCode}");
                 }

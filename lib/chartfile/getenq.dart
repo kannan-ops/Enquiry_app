@@ -37,7 +37,6 @@ class _GetEnquiryState extends State<GetEnquiry> {
 
   final List<dynamic> _enquiries = [];
   List<String> _selectedCategories = [];
-  bool _isSelectionMode = false;
   final Set<int> _selectedItemIds = {};
   Set<int> _viewedIds = {};
   List<dynamic> _allEnquiries = [];
@@ -1306,7 +1305,6 @@ class _GetEnquiryState extends State<GetEnquiry> {
 
     return Scaffold(
       appBar: AppBar(
-<<<<<<< HEAD
         title: Text(_isSelectionMode ? "${_selectedIds.length} Selected" : "Enquiries"),
         backgroundColor: colorScheme.primary,
         foregroundColor: colorScheme.onPrimary,
@@ -1341,48 +1339,6 @@ class _GetEnquiryState extends State<GetEnquiry> {
             },
           ),
         ],
-=======
-        title: Text(_isSelectionMode ? "${_selectedItemIds.length} Selected" : "Enquiries"),
-        backgroundColor: Color(0xFF3B5BDB),
-        actions: _isSelectionMode
-            ? [
-                IconButton(
-                  icon: const Icon(Icons.close_rounded, color: Colors.white),
-                  tooltip: "Cancel Selection",
-                  onPressed: _cancelSelectionMode,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.delete_sweep_rounded, color: Colors.white),
-                  tooltip: "Remove All",
-                  onPressed: _deselectAll,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.share_rounded, color: Colors.white),
-                  tooltip: "Share Selected",
-                  onPressed: _shareSelectedItems,
-                ),
-              ]
-            : [
-                IconButton(
-                  icon: const Icon(Icons.select_all_rounded, color: Colors.white),
-                  tooltip: "Select Mode",
-                  onPressed: _enterSelectionMode,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.download_rounded, color: Colors.white),
-                  tooltip: "Export CSV Report",
-                  onPressed: () => _exportToCSV(context),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.refresh_rounded, color: Colors.white),
-                  onPressed: () {
-                    setState(() {
-                      futureEnquiries = fetchEnquiries();
-                    });
-                  },
-                ),
-              ],
->>>>>>> de88c39 (Update project with latest changes and bug fixes)
       ),
       bottomNavigationBar: _isSelectionMode
           ? Container(
@@ -1804,7 +1760,6 @@ class _GetEnquiryState extends State<GetEnquiry> {
                         );
                       }
 
-<<<<<<< HEAD
                       final isSelected = _selectedIds.contains(id);
                       final isDarkMode = theme.brightness == Brightness.dark;
                       final cardBg = isSelected && _isSelectionMode
@@ -1815,11 +1770,6 @@ class _GetEnquiryState extends State<GetEnquiry> {
                           : colorScheme.outlineVariant.withOpacity(0.5);
 
                       return Card(
-=======
-                      final isSelected = _selectedItemIds.contains(id);
-
-                      final cardWidget = Card(
->>>>>>> de88c39 (Update project with latest changes and bug fixes)
                         margin: const EdgeInsets.only(bottom: 16),
                         elevation: isSelected && _isSelectionMode ? 6 : 2,
                         shadowColor: colorScheme.shadow.withOpacity(0.1),
@@ -1832,7 +1782,6 @@ class _GetEnquiryState extends State<GetEnquiry> {
                         ),
                         child: InkWell(
                           borderRadius: BorderRadius.circular(16),
-<<<<<<< HEAD
                           onTap: () {
                             if (_isSelectionMode) {
                               setState(() {
@@ -1860,28 +1809,6 @@ class _GetEnquiryState extends State<GetEnquiry> {
                               });
                             }
                           },
-=======
-                          onTap: _isSelectionMode
-                              ? () {
-                                  setState(() {
-                                    if (isSelected) {
-                                      _selectedItemIds.remove(id);
-                                    } else {
-                                      _selectedItemIds.add(id);
-                                    }
-                                  });
-                                }
-                              : () {
-                                  _markAsViewed(id);
-                                  setState(() {
-                                    if (isExpanded) {
-                                      _expandedIds.remove(id);
-                                    } else {
-                                      _expandedIds.add(id);
-                                    }
-                                  });
-                                },
->>>>>>> de88c39 (Update project with latest changes and bug fixes)
                           child: Container(
                             padding: const EdgeInsets.all(18),
                             decoration: BoxDecoration(
@@ -2274,29 +2201,6 @@ class _GetEnquiryState extends State<GetEnquiry> {
                           ),
                         ),
                       );
-
-                      if (_isSelectionMode) {
-                        return Row(
-                          children: [
-                            Checkbox(
-                              value: isSelected,
-                              activeColor: const Color(0xFF3B5BDB),
-                              onChanged: (val) {
-                                setState(() {
-                                  if (val == true) {
-                                    _selectedItemIds.add(id);
-                                  } else {
-                                    _selectedItemIds.remove(id);
-                                  }
-                                });
-                              },
-                            ),
-                            Expanded(child: cardWidget),
-                          ],
-                        );
-                      } else {
-                        return cardWidget;
-                      }
                     },
                   ),
                 ),

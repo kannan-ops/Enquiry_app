@@ -977,15 +977,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final displayName = (_userName != null && _userName!.isNotEmpty) ? _userName! : "";
 
-<<<<<<< HEAD
-    return
-      ScreenUtilInit(
-=======
     final items = _feedType == "orders"
         ? _dashboardOrders
         : (_feedType == "enquiries" ? _dashboardEnquiries : _dashboardSectors);
     final filtered = items.where((item) {
       if (item is! Map) return false;
+
+      // Storage Category Filter
+      final storage = _storageInstance ?? StorageService.currentInstance;
+      if (!storage.isCategoryAllowed(item)) {
+        return false;
+      }
 
       // Category filter
       final activeSelected = _feedType == "orders"
@@ -1024,7 +1026,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     }).toList();
 
     return ScreenUtilInit(
->>>>>>> de88c39 (Update project with latest changes and bug fixes)
       designSize: const Size(390, 844),
       minTextAdapt: true,
       builder: (context, child) => Scaffold(
@@ -2196,52 +2197,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-<<<<<<< HEAD
-  Widget _buildFeedList(bool isDarkMode) {
-    final items = _feedType == "orders"
-        ? _dashboardOrders
-        : (_feedType == "enquiries" ? _dashboardEnquiries : _dashboardSectors);
-    final filtered = items.where((item) {
-      if (item is! Map) return false;
-
-      // 0. Category Filter
-      final storage = _storageInstance ?? StorageService.currentInstance;
-      if (!storage.isCategoryAllowed(item)) {
-        return false;
-      }
-
-      // 1. Search Query Filter
-      final name = (item["name"] ?? "").toString().toLowerCase();
-      final company = (item["company"] ?? "").toString().toLowerCase();
-      final product = (item["product"] ?? "").toString().toLowerCase();
-      final q = _searchQuery.toLowerCase().trim();
-      if (q.isNotEmpty) {
-        if (!name.contains(q) && !company.contains(q) && !product.contains(q)) {
-          return false;
-        }
-      }
-
-      // 2. Filter Status Chips
-      final id = item["id"] is int ? item["id"] : int.tryParse(item["id"].toString()) ?? 0;
-      final msgs = _chatMessages[id] ?? [];
-      
-      switch (_feedFilter) {
-        case "today":
-          return _isToday(item['submittedAt'] ?? item['submitted_at'] ?? item['created_at']);
-        case "unreplied":
-          return msgs.isEmpty || !msgs.any((m) => m["sender"]?.toString().toLowerCase() == "admin");
-        case "received":
-          return msgs.isNotEmpty && msgs.last["sender"]?.toString().toLowerCase() != "admin";
-        case "sent":
-          return msgs.isNotEmpty && msgs.any((m) => m["sender"]?.toString().toLowerCase() == "admin");
-        default:
-          return true;
-      }
-    }).toList();
-
-=======
   Widget _buildFeedList(bool isDarkMode, List<dynamic> filtered) {
->>>>>>> de88c39 (Update project with latest changes and bug fixes)
     if (filtered.isEmpty) {
       return Center(
         child: Padding(

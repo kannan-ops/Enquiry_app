@@ -35,7 +35,6 @@ class _GetByIdState extends State<GetById> {
 
   final List<dynamic> _products = [];
   List<String> _selectedCategories = [];
-  bool _isSelectionMode = false;
   final Set<int> _selectedItemIds = {};
   Set<int> _viewedIds = {};
   List<dynamic> _allProducts = [];
@@ -1276,7 +1275,6 @@ class _GetByIdState extends State<GetById> {
 
     return Scaffold(
       appBar: AppBar(
-<<<<<<< HEAD
         title: Text(_isSelectionMode ? "${_selectedIds.length} Selected" : "Product List"),
         backgroundColor: colorScheme.primary,
         foregroundColor: colorScheme.onPrimary,
@@ -1311,48 +1309,6 @@ class _GetByIdState extends State<GetById> {
             },
           ),
         ],
-=======
-        title: Text(_isSelectionMode ? "${_selectedItemIds.length} Selected" : "Product List"),
-        backgroundColor: Color(0xFF3B5BDB),
-        actions: _isSelectionMode
-            ? [
-                IconButton(
-                  icon: const Icon(Icons.close_rounded, color: Colors.white),
-                  tooltip: "Cancel Selection",
-                  onPressed: _cancelSelectionMode,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.delete_sweep_rounded, color: Colors.white),
-                  tooltip: "Remove All",
-                  onPressed: _deselectAll,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.share_rounded, color: Colors.white),
-                  tooltip: "Share Selected",
-                  onPressed: _shareSelectedItems,
-                ),
-              ]
-            : [
-                IconButton(
-                  icon: const Icon(Icons.select_all_rounded, color: Colors.white),
-                  tooltip: "Select Mode",
-                  onPressed: _enterSelectionMode,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.download_rounded, color: Colors.white),
-                  tooltip: "Export CSV Report",
-                  onPressed: () => _exportToCSV(context),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.refresh_rounded, color: Colors.white),
-                  onPressed: () {
-                    setState(() {
-                      futureProducts = fetchProducts();
-                    });
-                  },
-                ),
-              ],
->>>>>>> de88c39 (Update project with latest changes and bug fixes)
       ),
       bottomNavigationBar: _isSelectionMode
           ? Container(

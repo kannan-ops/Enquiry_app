@@ -11,13 +11,10 @@ import 'chat_screen.dart';
 import 'package:enquiry_app/widgets/sms_chat_dialog.dart';
 import 'package:enquiry_app/widgets/reply_form_dialog.dart';
 import 'package:enquiry_app/services/storage_service.dart';
-<<<<<<< HEAD
 import 'package:enquiry_app/utils/share_helper.dart';
-=======
 import 'package:enquiry_app/widgets/multi_select_category_dropdown.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
->>>>>>> de88c39 (Update project with latest changes and bug fixes)
 
 class getbuk extends StatefulWidget {
   const getbuk({super.key});
@@ -37,7 +34,6 @@ class _getbukState extends State<getbuk> {
   final String apiUrl = "https://bulk.srivagroups.in/api/bulk-orders?limit=1000000";
   final Set<int> _expandedIds = {};
   bool _isAdmin = false;
-  bool _isSelectionMode = false;
   final Set<int> _selectedIds = {};
 
   final Map<int, bool> _unreadChats = {};
@@ -1296,7 +1292,6 @@ class _getbukState extends State<getbuk> {
 
     return Scaffold(
       appBar: AppBar(
-<<<<<<< HEAD
         title: Text(_isSelectionMode ? "${_selectedIds.length} Selected" : "Bulk Orders"),
         backgroundColor: colorScheme.primary,
         foregroundColor: colorScheme.onPrimary,
@@ -1331,48 +1326,6 @@ class _getbukState extends State<getbuk> {
             },
           ),
         ],
-=======
-        title: Text(_isSelectionMode ? "${_selectedItemIds.length} Selected" : "Bulk Orders"),
-        backgroundColor: Color(0xFF3B5BDB),
-        actions: _isSelectionMode
-            ? [
-                IconButton(
-                  icon: const Icon(Icons.close_rounded, color: Colors.white),
-                  tooltip: "Cancel Selection",
-                  onPressed: _cancelSelectionMode,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.delete_sweep_rounded, color: Colors.white),
-                  tooltip: "Remove All",
-                  onPressed: _deselectAll,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.share_rounded, color: Colors.white),
-                  tooltip: "Share Selected",
-                  onPressed: _shareSelectedItems,
-                ),
-              ]
-            : [
-                IconButton(
-                  icon: const Icon(Icons.select_all_rounded, color: Colors.white),
-                  tooltip: "Select Mode",
-                  onPressed: _enterSelectionMode,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.download_rounded, color: Colors.white),
-                  tooltip: "Export CSV Report",
-                  onPressed: () => _exportToCSV(context),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.refresh_rounded, color: Colors.white),
-                  onPressed: () {
-                    setState(() {
-                      futureOrders = fetchOrders();
-                    });
-                  },
-                ),
-              ],
->>>>>>> de88c39 (Update project with latest changes and bug fixes)
       ),
       bottomNavigationBar: _isSelectionMode
           ? Container(
@@ -1776,7 +1729,6 @@ class _getbukState extends State<getbuk> {
                         );
                       }
 
-<<<<<<< HEAD
                       final isSelected = _selectedIds.contains(id);
                       final isDarkMode = theme.brightness == Brightness.dark;
                       final cardBg = isSelected && _isSelectionMode
@@ -1787,11 +1739,6 @@ class _getbukState extends State<getbuk> {
                           : colorScheme.outlineVariant.withOpacity(0.5);
 
                       return Card(
-=======
-                      final isSelected = _selectedItemIds.contains(id);
-
-                      final cardWidget = Card(
->>>>>>> de88c39 (Update project with latest changes and bug fixes)
                         margin: const EdgeInsets.only(bottom: 16),
                         elevation: isSelected && _isSelectionMode ? 6 : 2,
                         shadowColor: colorScheme.shadow.withOpacity(0.1),
@@ -1804,7 +1751,6 @@ class _getbukState extends State<getbuk> {
                         ),
                         child: InkWell(
                           borderRadius: BorderRadius.circular(16),
-<<<<<<< HEAD
                           onTap: () {
                             if (_isSelectionMode) {
                               setState(() {
@@ -1832,28 +1778,6 @@ class _getbukState extends State<getbuk> {
                               });
                             }
                           },
-=======
-                          onTap: _isSelectionMode
-                              ? () {
-                                  setState(() {
-                                    if (isSelected) {
-                                      _selectedItemIds.remove(id);
-                                    } else {
-                                      _selectedItemIds.add(id);
-                                    }
-                                  });
-                                }
-                              : () {
-                                  _markAsViewed(id);
-                                  setState(() {
-                                    if (isExpanded) {
-                                      _expandedIds.remove(id);
-                                    } else {
-                                      _expandedIds.add(id);
-                                    }
-                                  });
-                                },
->>>>>>> de88c39 (Update project with latest changes and bug fixes)
                           child: Container(
                             padding: const EdgeInsets.all(18),
                             decoration: BoxDecoration(
@@ -2266,30 +2190,8 @@ class _getbukState extends State<getbuk> {
                           ),
                         ),
                       );
-
-                      if (_isSelectionMode) {
-                        return Row(
-                          children: [
-                            Checkbox(
-                              value: isSelected,
-                              activeColor: const Color(0xFF3B5BDB),
-                              onChanged: (val) {
-                                setState(() {
-                                  if (val == true) {
-                                    _selectedItemIds.add(id);
-                                  } else {
-                                    _selectedItemIds.remove(id);
-                                  }
-                                });
-                              },
-                            ),
-                            Expanded(child: cardWidget),
-                          ],
-                        );
-                      } else {
-                        return cardWidget;
-                      }
                     },
+
                   ),
                 ),
               ),
