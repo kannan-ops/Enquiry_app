@@ -11,7 +11,13 @@ import 'chat_screen.dart';
 import 'package:enquiry_app/widgets/sms_chat_dialog.dart';
 import 'package:enquiry_app/widgets/reply_form_dialog.dart';
 import 'package:enquiry_app/services/storage_service.dart';
+<<<<<<< HEAD
 import 'package:enquiry_app/utils/share_helper.dart';
+=======
+import 'package:enquiry_app/widgets/multi_select_category_dropdown.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+>>>>>>> de88c39 (Update project with latest changes and bug fixes)
 
 class getbuk extends StatefulWidget {
   const getbuk({super.key});
@@ -24,6 +30,10 @@ class _getbukState extends State<getbuk> {
   late Future<List<dynamic>> futureOrders;
   String _searchQuery = "";
   String _selectedFilter = "all";
+  List<String> _selectedCategories = [];
+  bool _isSelectionMode = false;
+  final Set<int> _selectedItemIds = {};
+  Set<int> _viewedIds = {};
   final String apiUrl = "https://bulk.srivagroups.in/api/bulk-orders?limit=1000000";
   final Set<int> _expandedIds = {};
   bool _isAdmin = false;
@@ -793,12 +803,225 @@ class _getbukState extends State<getbuk> {
     );
   }
 
+  String _getCategoryFromItem(dynamic x) {
+    if (x is! Map) return "";
+    final keys = ['category', 'categories', 'category_name', 'Category', 'company', 'website_name'];
+    for (final key in keys) {
+      if (x.containsKey(key) && x[key] != null) {
+        final val = x[key];
+        if (val is Map) {
+          final subVal = val['name'] ?? val['title'] ?? val['label'];
+          if (subVal != null && subVal.toString().trim().isNotEmpty) {
+            return subVal.toString().trim();
+          }
+        } else if (val is List) {
+          if (val.isNotEmpty) {
+            final first = val.first;
+            if (first is Map) {
+              final subVal = first['name'] ?? first['title'] ?? first['label'];
+              if (subVal != null && subVal.toString().trim().isNotEmpty) {
+                return subVal.toString().trim();
+              }
+            } else if (first != null) {
+              return first.toString().trim();
+            }
+          }
+        } else {
+          final str = val.toString().trim();
+          if (str.isNotEmpty && str.toLowerCase() != "null" && str != "-") {
+            return str;
+          }
+        }
+      }
+    }
+    return "";
+  }
+
+  List<String> get _currentFeedCategories {
+    final cats = _orders
+        .map((x) => _getCategoryFromItem(x))
+        .toSet()
+        .toList();
+    cats.sort();
+    return cats;
+  }
+
+  void _enterSelectionMode() {
+    setState(() {
+      _isSelectionMode = true;
+      _selectedItemIds.clear();
+    });
+  }
+
+  void _cancelSelectionMode() {
+    setState(() {
+      _isSelectionMode = false;
+      _selectedItemIds.clear();
+    });
+  }
+
+  void _deselectAll() {
+    setState(() {
+      _selectedItemIds.clear();
+    });
+  }
+
+  void _shareSelectedItems() {
+    if (_selectedItemIds.isEmpty) return;
+
+    final selectedOrders = _orders.where((o) {
+      final id = o["id"] is int ? o["id"] : int.tryParse(o["id"].toString()) ?? 0;
+      return _selectedItemIds.contains(id);
+    }).toList();
+
+    final buffer = StringBuffer();
+    buffer.writeln("Shared Bulk Orders Detail:\n");
+    for (final o in selectedOrders) {
+      buffer.writeln("• Client: ${o['name'] ?? ''}");
+      buffer.writeln("  Product: ${o['product'] ?? o['product_name'] ?? ''}");
+      buffer.writeln("  Quantity: ${o['quantity'] ?? ''}");
+      buffer.writeln("  Company: ${o['company'] ?? o['company_name'] ?? ''}");
+      buffer.writeln("  Mobile: ${o['mobile'] ?? ''}");
+      buffer.writeln("  Delivery Date: ${o['deliveryDate'] ?? o['preferred_delivery_date'] ?? ''}");
+      buffer.writeln("");
+    }
+    
+    _showCustomShareSheet(buffer.toString().trim(), "Bulk Orders Details");
+  }
+
+  void _showCustomShareSheet(String shareText, String subject) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+        return Container(
+          decoration: BoxDecoration(
+            color: isDarkMode ? const Color(0xFF0F172A) : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: isDarkMode ? Colors.white24 : Colors.black12,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                "Share Details",
+                style: GoogleFonts.outfit(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                  color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                ),
+              ),
+              const SizedBox(height: 20),
+              ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: const Color(0xFF25D366).withOpacity(0.12),
+                  child: const Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFF25D366)),
+                ),
+                title: Text("Share via WhatsApp", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final url = "https://wa.me/?text=${Uri.encodeComponent(shareText)}";
+                  final uri = Uri.parse(url);
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                },
+              ),
+              ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: Colors.blue.withOpacity(0.12),
+                  child: const Icon(Icons.sms_rounded, color: Colors.blue),
+                ),
+                title: Text("Share via SMS", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final url = "sms:?body=${Uri.encodeComponent(shareText)}";
+                  final uri = Uri.parse(url);
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                },
+              ),
+              ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: Colors.red.withOpacity(0.12),
+                  child: const Icon(Icons.email_rounded, color: Colors.red),
+                ),
+                title: Text("Share via Gmail / Email", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final url = "mailto:?subject=${Uri.encodeComponent(subject)}&body=${Uri.encodeComponent(shareText)}";
+                  final uri = Uri.parse(url);
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                },
+              ),
+              ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: const Color(0xFF6366F1).withOpacity(0.12),
+                  child: const Icon(Icons.forum_rounded, color: Color(0xFF6366F1)),
+                ),
+                title: Text("Share to Internal Chat", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final prefs = await SharedPreferences.getInstance();
+                  final String lastModule = prefs.getString('last_chat_module') ?? 'enquiry';
+                  final int refId = prefs.getInt('last_chat_reference_id') ?? 1;
+                  final String userName = prefs.getString('last_chat_user_name') ?? 'Client';
+
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ChatScreen(
+                        module: lastModule,
+                        referenceId: refId,
+                        userName: userName,
+                        initialSharedText: shareText,
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   void initState() {
     super.initState();
+    _loadViewedIds();
     _scrollController.addListener(_scrollListener);
     futureOrders = fetchOrders();
     _loadAdminStatus();
+  }
+
+  Future<void> _loadViewedIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList('viewed_bulk_order_ids') ?? [];
+    setState(() {
+      _viewedIds = list.map((e) => int.tryParse(e) ?? 0).toSet();
+    });
+  }
+
+  Future<void> _markAsViewed(int id) async {
+    if (_viewedIds.contains(id)) return;
+    setState(() {
+      _viewedIds.add(id);
+    });
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('viewed_bulk_order_ids', _viewedIds.map((e) => e.toString()).toList());
   }
 
   void _scrollListener() {
@@ -1073,6 +1296,7 @@ class _getbukState extends State<getbuk> {
 
     return Scaffold(
       appBar: AppBar(
+<<<<<<< HEAD
         title: Text(_isSelectionMode ? "${_selectedIds.length} Selected" : "Bulk Orders"),
         backgroundColor: colorScheme.primary,
         foregroundColor: colorScheme.onPrimary,
@@ -1107,6 +1331,48 @@ class _getbukState extends State<getbuk> {
             },
           ),
         ],
+=======
+        title: Text(_isSelectionMode ? "${_selectedItemIds.length} Selected" : "Bulk Orders"),
+        backgroundColor: Color(0xFF3B5BDB),
+        actions: _isSelectionMode
+            ? [
+                IconButton(
+                  icon: const Icon(Icons.close_rounded, color: Colors.white),
+                  tooltip: "Cancel Selection",
+                  onPressed: _cancelSelectionMode,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_sweep_rounded, color: Colors.white),
+                  tooltip: "Remove All",
+                  onPressed: _deselectAll,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.share_rounded, color: Colors.white),
+                  tooltip: "Share Selected",
+                  onPressed: _shareSelectedItems,
+                ),
+              ]
+            : [
+                IconButton(
+                  icon: const Icon(Icons.select_all_rounded, color: Colors.white),
+                  tooltip: "Select Mode",
+                  onPressed: _enterSelectionMode,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.download_rounded, color: Colors.white),
+                  tooltip: "Export CSV Report",
+                  onPressed: () => _exportToCSV(context),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+                  onPressed: () {
+                    setState(() {
+                      futureOrders = fetchOrders();
+                    });
+                  },
+                ),
+              ],
+>>>>>>> de88c39 (Update project with latest changes and bug fixes)
       ),
       bottomNavigationBar: _isSelectionMode
           ? Container(
@@ -1261,8 +1527,21 @@ class _getbukState extends State<getbuk> {
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
                 ),
-                contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
               ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: MultiSelectCategoryDropdown(
+              categories: _currentFeedCategories,
+              selectedCategories: _selectedCategories,
+              module: "bulk_order",
+              hint: "Filter by Categories",
+              onChanged: (selected) {
+                setState(() {
+                  _selectedCategories = selected;
+                });
+              },
             ),
           ),
           _buildFilterChips(),
@@ -1300,7 +1579,16 @@ class _getbukState extends State<getbuk> {
               }
               final name = (o["name"] ?? "").toString().toLowerCase();
               final prod = (o["product"] ?? "").toString().toLowerCase();
-              return name.contains(_searchQuery) || prod.contains(_searchQuery);
+              final matchSearch = name.contains(_searchQuery) || prod.contains(_searchQuery);
+              if (!matchSearch) return false;
+
+              if (_selectedCategories.isNotEmpty) {
+                final cat = _getCategoryFromItem(o);
+                if (!_selectedCategories.contains(cat)) {
+                  return false;
+                }
+              }
+              return true;
             }).toList();
 
             // Apply filter chip selection
@@ -1311,7 +1599,11 @@ class _getbukState extends State<getbuk> {
                 final idB = b["id"] is int ? b["id"] : int.tryParse(b["id"].toString()) ?? 0;
                 return idB.compareTo(idA);
               });
-              filteredOrders = sorted.isNotEmpty ? [sorted.first] : [];
+              final unviewed = sorted.where((o) {
+                final id = o["id"] is int ? o["id"] : int.tryParse(o["id"].toString()) ?? 0;
+                return !_viewedIds.contains(id);
+              }).toList();
+              filteredOrders = unviewed;
             } else if (_selectedFilter == "received") {
               filteredOrders = filteredOrders.where((o) {
                 final id = o["id"] is int ? o["id"] : int.tryParse(o["id"].toString()) ?? 0;
@@ -1484,6 +1776,7 @@ class _getbukState extends State<getbuk> {
                         );
                       }
 
+<<<<<<< HEAD
                       final isSelected = _selectedIds.contains(id);
                       final isDarkMode = theme.brightness == Brightness.dark;
                       final cardBg = isSelected && _isSelectionMode
@@ -1494,6 +1787,11 @@ class _getbukState extends State<getbuk> {
                           : colorScheme.outlineVariant.withOpacity(0.5);
 
                       return Card(
+=======
+                      final isSelected = _selectedItemIds.contains(id);
+
+                      final cardWidget = Card(
+>>>>>>> de88c39 (Update project with latest changes and bug fixes)
                         margin: const EdgeInsets.only(bottom: 16),
                         elevation: isSelected && _isSelectionMode ? 6 : 2,
                         shadowColor: colorScheme.shadow.withOpacity(0.1),
@@ -1506,6 +1804,7 @@ class _getbukState extends State<getbuk> {
                         ),
                         child: InkWell(
                           borderRadius: BorderRadius.circular(16),
+<<<<<<< HEAD
                           onTap: () {
                             if (_isSelectionMode) {
                               setState(() {
@@ -1533,6 +1832,28 @@ class _getbukState extends State<getbuk> {
                               });
                             }
                           },
+=======
+                          onTap: _isSelectionMode
+                              ? () {
+                                  setState(() {
+                                    if (isSelected) {
+                                      _selectedItemIds.remove(id);
+                                    } else {
+                                      _selectedItemIds.add(id);
+                                    }
+                                  });
+                                }
+                              : () {
+                                  _markAsViewed(id);
+                                  setState(() {
+                                    if (isExpanded) {
+                                      _expandedIds.remove(id);
+                                    } else {
+                                      _expandedIds.add(id);
+                                    }
+                                  });
+                                },
+>>>>>>> de88c39 (Update project with latest changes and bug fixes)
                           child: Container(
                             padding: const EdgeInsets.all(18),
                             decoration: BoxDecoration(
@@ -1861,6 +2182,7 @@ class _getbukState extends State<getbuk> {
                                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                                   ),
                                                   onPressed: () {
+                                                    _markAsViewed(id);
                                                     showDialog(
                                                       context: context,
                                                       builder: (context) => ReplyFormDialog(
@@ -1900,6 +2222,7 @@ class _getbukState extends State<getbuk> {
                                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                             ),
                                             onPressed: () {
+                                              _markAsViewed(id);
                                               Navigator.push(
                                                 context,
                                                 MaterialPageRoute(
@@ -1943,6 +2266,29 @@ class _getbukState extends State<getbuk> {
                           ),
                         ),
                       );
+
+                      if (_isSelectionMode) {
+                        return Row(
+                          children: [
+                            Checkbox(
+                              value: isSelected,
+                              activeColor: const Color(0xFF3B5BDB),
+                              onChanged: (val) {
+                                setState(() {
+                                  if (val == true) {
+                                    _selectedItemIds.add(id);
+                                  } else {
+                                    _selectedItemIds.remove(id);
+                                  }
+                                });
+                              },
+                            ),
+                            Expanded(child: cardWidget),
+                          ],
+                        );
+                      } else {
+                        return cardWidget;
+                      }
                     },
                   ),
                 ),

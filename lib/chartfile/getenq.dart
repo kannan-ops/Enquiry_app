@@ -3,6 +3,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
+import 'package:enquiry_app/widgets/multi_select_category_dropdown.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:enquiry_app/utils/api_debug_logger.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'editenq.dart';
@@ -33,6 +36,10 @@ class _GetEnquiryState extends State<GetEnquiry> {
   bool _isChatStatusLoaded = false;
 
   final List<dynamic> _enquiries = [];
+  List<String> _selectedCategories = [];
+  bool _isSelectionMode = false;
+  final Set<int> _selectedItemIds = {};
+  Set<int> _viewedIds = {};
   List<dynamic> _allEnquiries = [];
   int _currentPage = 1;
   int _limit = 10;
@@ -841,12 +848,224 @@ class _GetEnquiryState extends State<GetEnquiry> {
     );
   }
 
+  String _getCategoryFromItem(dynamic x) {
+    if (x is! Map) return "";
+    final keys = ['category', 'categories', 'category_name', 'Category', 'company', 'website_name'];
+    for (final key in keys) {
+      if (x.containsKey(key) && x[key] != null) {
+        final val = x[key];
+        if (val is Map) {
+          final subVal = val['name'] ?? val['title'] ?? val['label'];
+          if (subVal != null && subVal.toString().trim().isNotEmpty) {
+            return subVal.toString().trim();
+          }
+        } else if (val is List) {
+          if (val.isNotEmpty) {
+            final first = val.first;
+            if (first is Map) {
+              final subVal = first['name'] ?? first['title'] ?? first['label'];
+              if (subVal != null && subVal.toString().trim().isNotEmpty) {
+                return subVal.toString().trim();
+              }
+            } else if (first != null) {
+              return first.toString().trim();
+            }
+          }
+        } else {
+          final str = val.toString().trim();
+          if (str.isNotEmpty && str.toLowerCase() != "null" && str != "-") {
+            return str;
+          }
+        }
+      }
+    }
+    return "";
+  }
+
+  List<String> get _currentFeedCategories {
+    final cats = _enquiries
+        .map((x) => _getCategoryFromItem(x))
+        .toSet()
+        .toList();
+    cats.sort();
+    return cats;
+  }
+
+  void _enterSelectionMode() {
+    setState(() {
+      _isSelectionMode = true;
+      _selectedItemIds.clear();
+    });
+  }
+
+  void _cancelSelectionMode() {
+    setState(() {
+      _isSelectionMode = false;
+      _selectedItemIds.clear();
+    });
+  }
+
+  void _deselectAll() {
+    setState(() {
+      _selectedItemIds.clear();
+    });
+  }
+
+  void _shareSelectedItems() {
+    if (_selectedItemIds.isEmpty) return;
+
+    final selectedEnqs = _enquiries.where((e) {
+      final id = e["id"] is int ? e["id"] : int.tryParse(e["id"].toString()) ?? 0;
+      return _selectedItemIds.contains(id);
+    }).toList();
+
+    final buffer = StringBuffer();
+    buffer.writeln("Shared Enquiries Detail:\n");
+    for (final e in selectedEnqs) {
+      buffer.writeln("• Client: ${e['name'] ?? ''}");
+      buffer.writeln("  Subject: ${e['subject'] ?? ''}");
+      buffer.writeln("  Product: ${e['product'] ?? ''}");
+      buffer.writeln("  Company: ${e['company'] ?? ''}");
+      buffer.writeln("  Mobile: ${e['mobile'] ?? ''}");
+      buffer.writeln("");
+    }
+    
+    _showCustomShareSheet(buffer.toString().trim(), "Enquiries Details");
+  }
+
+  void _showCustomShareSheet(String shareText, String subject) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+        return Container(
+          decoration: BoxDecoration(
+            color: isDarkMode ? const Color(0xFF0F172A) : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: isDarkMode ? Colors.white24 : Colors.black12,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                "Share Details",
+                style: GoogleFonts.outfit(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                  color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                ),
+              ),
+              const SizedBox(height: 20),
+              ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: const Color(0xFF25D366).withOpacity(0.12),
+                  child: const Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFF25D366)),
+                ),
+                title: Text("Share via WhatsApp", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final url = "https://wa.me/?text=${Uri.encodeComponent(shareText)}";
+                  final uri = Uri.parse(url);
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                },
+              ),
+              ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: Colors.blue.withOpacity(0.12),
+                  child: const Icon(Icons.sms_rounded, color: Colors.blue),
+                ),
+                title: Text("Share via SMS", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final url = "sms:?body=${Uri.encodeComponent(shareText)}";
+                  final uri = Uri.parse(url);
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                },
+              ),
+              ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: Colors.red.withOpacity(0.12),
+                  child: const Icon(Icons.email_rounded, color: Colors.red),
+                ),
+                title: Text("Share via Gmail / Email", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final url = "mailto:?subject=${Uri.encodeComponent(subject)}&body=${Uri.encodeComponent(shareText)}";
+                  final uri = Uri.parse(url);
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                },
+              ),
+              ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: const Color(0xFF6366F1).withOpacity(0.12),
+                  child: const Icon(Icons.forum_rounded, color: Color(0xFF6366F1)),
+                ),
+                title: Text("Share to Internal Chat", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final prefs = await SharedPreferences.getInstance();
+                  final String lastModule = prefs.getString('last_chat_module') ?? 'enquiry';
+                  final int refId = prefs.getInt('last_chat_reference_id') ?? 1;
+                  final String userName = prefs.getString('last_chat_user_name') ?? 'Client';
+
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ChatScreen(
+                        module: lastModule,
+                        referenceId: refId,
+                        userName: userName,
+                        initialSharedText: shareText,
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   void initState() {
     super.initState();
+    _loadViewedIds();
     _scrollController.addListener(_scrollListener);
     futureEnquiries = fetchEnquiries();
     _loadAdminStatus();
+  }
+
+  Future<void> _loadViewedIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList('viewed_enquiry_ids') ?? [];
+    setState(() {
+      _viewedIds = list.map((e) => int.tryParse(e) ?? 0).toSet();
+    });
+  }
+
+  Future<void> _markAsViewed(int id) async {
+    if (_viewedIds.contains(id)) return;
+    setState(() {
+      _viewedIds.add(id);
+    });
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('viewed_enquiry_ids', _viewedIds.map((e) => e.toString()).toList());
   }
 
   void _scrollListener() {
@@ -1087,6 +1306,7 @@ class _GetEnquiryState extends State<GetEnquiry> {
 
     return Scaffold(
       appBar: AppBar(
+<<<<<<< HEAD
         title: Text(_isSelectionMode ? "${_selectedIds.length} Selected" : "Enquiries"),
         backgroundColor: colorScheme.primary,
         foregroundColor: colorScheme.onPrimary,
@@ -1121,6 +1341,48 @@ class _GetEnquiryState extends State<GetEnquiry> {
             },
           ),
         ],
+=======
+        title: Text(_isSelectionMode ? "${_selectedItemIds.length} Selected" : "Enquiries"),
+        backgroundColor: Color(0xFF3B5BDB),
+        actions: _isSelectionMode
+            ? [
+                IconButton(
+                  icon: const Icon(Icons.close_rounded, color: Colors.white),
+                  tooltip: "Cancel Selection",
+                  onPressed: _cancelSelectionMode,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_sweep_rounded, color: Colors.white),
+                  tooltip: "Remove All",
+                  onPressed: _deselectAll,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.share_rounded, color: Colors.white),
+                  tooltip: "Share Selected",
+                  onPressed: _shareSelectedItems,
+                ),
+              ]
+            : [
+                IconButton(
+                  icon: const Icon(Icons.select_all_rounded, color: Colors.white),
+                  tooltip: "Select Mode",
+                  onPressed: _enterSelectionMode,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.download_rounded, color: Colors.white),
+                  tooltip: "Export CSV Report",
+                  onPressed: () => _exportToCSV(context),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+                  onPressed: () {
+                    setState(() {
+                      futureEnquiries = fetchEnquiries();
+                    });
+                  },
+                ),
+              ],
+>>>>>>> de88c39 (Update project with latest changes and bug fixes)
       ),
       bottomNavigationBar: _isSelectionMode
           ? Container(
@@ -1279,6 +1541,20 @@ class _GetEnquiryState extends State<GetEnquiry> {
               ),
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: MultiSelectCategoryDropdown(
+              categories: _currentFeedCategories,
+              selectedCategories: _selectedCategories,
+              module: "enquiry",
+              hint: "Filter by Categories",
+              onChanged: (selected) {
+                setState(() {
+                  _selectedCategories = selected;
+                });
+              },
+            ),
+          ),
           _buildFilterChips(),
           Expanded(
             child: Container(
@@ -1317,7 +1593,16 @@ class _GetEnquiryState extends State<GetEnquiry> {
               }
               final name = (e["name"] ?? "").toString().toLowerCase();
               final subject = (e["subject"] ?? "").toString().toLowerCase();
-              return name.contains(_searchQuery) || subject.contains(_searchQuery);
+              final matchSearch = name.contains(_searchQuery) || subject.contains(_searchQuery);
+              if (!matchSearch) return false;
+
+              if (_selectedCategories.isNotEmpty) {
+                final cat = _getCategoryFromItem(e);
+                if (!_selectedCategories.contains(cat)) {
+                  return false;
+                }
+              }
+              return true;
             }).toList();
 
             // Apply filter chip selection
@@ -1328,7 +1613,11 @@ class _GetEnquiryState extends State<GetEnquiry> {
                 final idB = b["id"] is int ? b["id"] : int.tryParse(b["id"].toString()) ?? 0;
                 return idB.compareTo(idA);
               });
-              filteredEnquiries = sorted.isNotEmpty ? [sorted.first] : [];
+              final unviewed = sorted.where((e) {
+                final id = e["id"] is int ? e["id"] : int.tryParse(e["id"].toString()) ?? 0;
+                return !_viewedIds.contains(id);
+              }).toList();
+              filteredEnquiries = unviewed;
             } else if (_selectedFilter == "received") {
               filteredEnquiries = filteredEnquiries.where((e) {
                 final id = e["id"] is int ? e["id"] : int.tryParse(e["id"].toString()) ?? 0;
@@ -1515,6 +1804,7 @@ class _GetEnquiryState extends State<GetEnquiry> {
                         );
                       }
 
+<<<<<<< HEAD
                       final isSelected = _selectedIds.contains(id);
                       final isDarkMode = theme.brightness == Brightness.dark;
                       final cardBg = isSelected && _isSelectionMode
@@ -1525,6 +1815,11 @@ class _GetEnquiryState extends State<GetEnquiry> {
                           : colorScheme.outlineVariant.withOpacity(0.5);
 
                       return Card(
+=======
+                      final isSelected = _selectedItemIds.contains(id);
+
+                      final cardWidget = Card(
+>>>>>>> de88c39 (Update project with latest changes and bug fixes)
                         margin: const EdgeInsets.only(bottom: 16),
                         elevation: isSelected && _isSelectionMode ? 6 : 2,
                         shadowColor: colorScheme.shadow.withOpacity(0.1),
@@ -1537,6 +1832,7 @@ class _GetEnquiryState extends State<GetEnquiry> {
                         ),
                         child: InkWell(
                           borderRadius: BorderRadius.circular(16),
+<<<<<<< HEAD
                           onTap: () {
                             if (_isSelectionMode) {
                               setState(() {
@@ -1564,6 +1860,28 @@ class _GetEnquiryState extends State<GetEnquiry> {
                               });
                             }
                           },
+=======
+                          onTap: _isSelectionMode
+                              ? () {
+                                  setState(() {
+                                    if (isSelected) {
+                                      _selectedItemIds.remove(id);
+                                    } else {
+                                      _selectedItemIds.add(id);
+                                    }
+                                  });
+                                }
+                              : () {
+                                  _markAsViewed(id);
+                                  setState(() {
+                                    if (isExpanded) {
+                                      _expandedIds.remove(id);
+                                    } else {
+                                      _expandedIds.add(id);
+                                    }
+                                  });
+                                },
+>>>>>>> de88c39 (Update project with latest changes and bug fixes)
                           child: Container(
                             padding: const EdgeInsets.all(18),
                             decoration: BoxDecoration(
@@ -1872,6 +2190,7 @@ class _GetEnquiryState extends State<GetEnquiry> {
                                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                                   ),
                                                   onPressed: () {
+                                                    _markAsViewed(id);
                                                     showDialog(
                                                       context: context,
                                                       builder: (context) => ReplyFormDialog(
@@ -1911,6 +2230,7 @@ class _GetEnquiryState extends State<GetEnquiry> {
                                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                             ),
                                             onPressed: () {
+                                              _markAsViewed(id);
                                               Navigator.push(
                                                 context,
                                                 MaterialPageRoute(
@@ -1954,6 +2274,29 @@ class _GetEnquiryState extends State<GetEnquiry> {
                           ),
                         ),
                       );
+
+                      if (_isSelectionMode) {
+                        return Row(
+                          children: [
+                            Checkbox(
+                              value: isSelected,
+                              activeColor: const Color(0xFF3B5BDB),
+                              onChanged: (val) {
+                                setState(() {
+                                  if (val == true) {
+                                    _selectedItemIds.add(id);
+                                  } else {
+                                    _selectedItemIds.remove(id);
+                                  }
+                                });
+                              },
+                            ),
+                            Expanded(child: cardWidget),
+                          ],
+                        );
+                      } else {
+                        return cardWidget;
+                      }
                     },
                   ),
                 ),

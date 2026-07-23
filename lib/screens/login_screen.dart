@@ -789,7 +789,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   void _autofillCredentials() {
     setState(() {
-      _emailController.text = 'admin@gmail.com';
+      _emailController.text = 'srivagroups.in@gmail.com';
       _passwordController.text = '123456';
     });
   }
@@ -1888,7 +1888,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   ).colorScheme.primary.withOpacity(0.7),
                                 ),
                                 labelText: 'Email Address',
-                                hintText: 'admin@gmail.com',
+                                hintText: 'srivagroups.in@gmail.com',
                               ),
                               validator: (value) {
                                 if (value == null || value.isEmpty) {

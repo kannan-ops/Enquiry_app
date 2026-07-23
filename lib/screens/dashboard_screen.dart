@@ -2,6 +2,8 @@ import 'dart:io';
 import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:enquiry_app/main.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,11 +19,16 @@ import 'package:enquiry_app/chartfile/getbulk.dart';
 import 'package:enquiry_app/chartfile/getenq.dart';
 import 'package:enquiry_app/chartfile/getsector.dart';
 import 'package:enquiry_app/chartfile/chat_threads_screen.dart';
+import 'package:enquiry_app/screens/chats_list_screen.dart';
 
 import 'package:enquiry_app/screens/profile_screen.dart';
 import 'package:enquiry_app/screens/settings_screen.dart';
 import 'package:enquiry_app/screens/security_screen.dart';
 import 'package:enquiry_app/screens/login_screen.dart';
+import 'package:enquiry_app/screens/others_category_screen.dart';
+import 'package:enquiry_app/utils/sharing_intent_handler.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:enquiry_app/widgets/multi_select_category_dropdown.dart';
 
 import 'package:enquiry_app/services/storage_service.dart';
 import 'package:enquiry_app/services/auth_service.dart';
@@ -73,29 +80,22 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   int? _lastSectorId;
   bool _isFirstLoad = true;
   bool _isAutoRefreshing = false;
+  bool _isSelectionMode = false;
+  final Set<int> _selectedItemIds = {};
+  List<String> _selectedOrdersCategories = [];
+  List<String> _selectedEnquiriesCategories = [];
+  List<String> _selectedSectorsCategories = [];
 
   @override
   void initState() {
     super.initState();
-    print("========== DASHBOARD ACCESS GRANTED ==========");
-    Future(() async {
-      print("[Sound] Testing new_notification.mp3 play...");
-      try {
-        final player = AudioPlayer();
-        await player.play(
-          AssetSource('sounds/new_notification.mp3'),
-        );
-        print("[Sound] Testing new_notification.mp3 play completed successfully!");
-      } catch (e) {
-        print("[Sound] Testing new_notification.mp3 failed: $e");
-      }
-    });
     _scrollController.addListener(_scrollListener);
     _updateTime();
     _timeTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       _updateTime();
     });
     _loadData();
+    SharingIntentHandler.checkAndProcessPending();
   }
 
 
@@ -260,25 +260,61 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     }
 
     bool hasNew = false;
+    bool hasNewToday = false;
 
     if (maxOrder > (_lastBulkOrderId ?? 0)) {
+      for (var item in _dashboardOrders) {
+        if (item is Map) {
+          final idVal = item["id"];
+          final id = idVal is int ? idVal : int.tryParse(idVal.toString()) ?? 0;
+          if (id > (_lastBulkOrderId ?? 0)) {
+            if (_isToday(item['submittedAt'] ?? item['submitted_at'])) {
+              hasNewToday = true;
+            }
+          }
+        }
+      }
       hasNew = true;
       _lastBulkOrderId = maxOrder;
     }
+
     if (maxEnquiry > (_lastEnquiryId ?? 0)) {
+      for (var item in _dashboardEnquiries) {
+        if (item is Map) {
+          final idVal = item["id"];
+          final id = idVal is int ? idVal : int.tryParse(idVal.toString()) ?? 0;
+          if (id > (_lastEnquiryId ?? 0)) {
+            if (_isToday(item['submittedAt'] ?? item['submitted_at'] ?? item['created_at'])) {
+              hasNewToday = true;
+            }
+          }
+        }
+      }
       hasNew = true;
       _lastEnquiryId = maxEnquiry;
     }
+
     if (maxSector > (_lastSectorId ?? 0)) {
+      for (var item in _dashboardSectors) {
+        if (item is Map) {
+          final idVal = item["id"];
+          final id = idVal is int ? idVal : int.tryParse(idVal.toString()) ?? 0;
+          if (id > (_lastSectorId ?? 0)) {
+            if (_isToday(item['submittedAt'] ?? item['created_at'])) {
+              hasNewToday = true;
+            }
+          }
+        }
+      }
       hasNew = true;
       _lastSectorId = maxSector;
     }
 
     print("Current Max ID: Bulk Orders=$maxOrder, Enquiries=$maxEnquiry, Sectors=$maxSector");
     print("Last Seen ID: Bulk Orders=$_lastBulkOrderId, Enquiries=$_lastEnquiryId, Sectors=$_lastSectorId");
-    print("Should Play = ${hasNew.toString().toUpperCase()}");
+    print("Should Play = ${hasNewToday.toString().toUpperCase()}");
 
-    if (hasNew) {
+    if (hasNewToday) {
       final prefs = await SharedPreferences.getInstance();
       final soundEnabled = prefs.getBool('notification_sound_enabled') ?? true;
       print("[Sound] soundEnabled preference: $soundEnabled");
@@ -692,6 +728,52 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     }
   }
 
+  String _getCategoryFromItem(dynamic x) {
+    if (x is! Map) return "";
+    final keys = ['category', 'categories', 'category_name', 'Category', 'company', 'website_name'];
+    for (final key in keys) {
+      if (x.containsKey(key) && x[key] != null) {
+        final val = x[key];
+        if (val is Map) {
+          final subVal = val['name'] ?? val['title'] ?? val['label'];
+          if (subVal != null && subVal.toString().trim().isNotEmpty) {
+            return subVal.toString().trim();
+          }
+        } else if (val is List) {
+          if (val.isNotEmpty) {
+            final first = val.first;
+            if (first is Map) {
+              final subVal = first['name'] ?? first['title'] ?? first['label'];
+              if (subVal != null && subVal.toString().trim().isNotEmpty) {
+                return subVal.toString().trim();
+              }
+            } else if (first != null) {
+              return first.toString().trim();
+            }
+          }
+        } else {
+          final str = val.toString().trim();
+          if (str.isNotEmpty && str.toLowerCase() != "null" && str != "-") {
+            return str;
+          }
+        }
+      }
+    }
+    return "";
+  }
+
+  List<String> get _currentFeedCategories {
+    final items = _feedType == "orders"
+        ? _dashboardOrders
+        : (_feedType == "enquiries" ? _dashboardEnquiries : _dashboardSectors);
+    final cats = items
+        .map((x) => _getCategoryFromItem(x))
+        .toSet()
+        .toList();
+    cats.sort();
+    return cats;
+  }
+
   int get todayBulkOrdersCount {
     return _dashboardOrders.where((o) => _isToday(o['submittedAt'] ?? o['submitted_at'])).length;
   }
@@ -895,11 +977,65 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
     final displayName = (_userName != null && _userName!.isNotEmpty) ? _userName! : "";
 
+<<<<<<< HEAD
     return
       ScreenUtilInit(
+=======
+    final items = _feedType == "orders"
+        ? _dashboardOrders
+        : (_feedType == "enquiries" ? _dashboardEnquiries : _dashboardSectors);
+    final filtered = items.where((item) {
+      if (item is! Map) return false;
+
+      // Category filter
+      final activeSelected = _feedType == "orders"
+          ? _selectedOrdersCategories
+          : (_feedType == "enquiries" ? _selectedEnquiriesCategories : _selectedSectorsCategories);
+      if (activeSelected.isNotEmpty) {
+        final cat = _getCategoryFromItem(item);
+        if (!activeSelected.contains(cat)) {
+          return false;
+        }
+      }
+
+      final name = (item["name"] ?? "").toString().toLowerCase();
+      final company = (item["company"] ?? "").toString().toLowerCase();
+      final product = (item["product"] ?? "").toString().toLowerCase();
+      final q = _searchQuery.toLowerCase().trim();
+      if (q.isNotEmpty) {
+        if (!name.contains(q) && !company.contains(q) && !product.contains(q)) {
+          return false;
+        }
+      }
+      final id = item["id"] is int ? item["id"] : int.tryParse(item["id"].toString()) ?? 0;
+      final msgs = _chatMessages[id] ?? [];
+      switch (_feedFilter) {
+        case "today":
+          return _isToday(item['submittedAt'] ?? item['submitted_at'] ?? item['created_at']);
+        case "unreplied":
+          return msgs.isEmpty || !msgs.any((m) => m["sender"]?.toString().toLowerCase() == "admin");
+        case "received":
+          return msgs.isNotEmpty && msgs.last["sender"]?.toString().toLowerCase() != "admin";
+        case "sent":
+          return msgs.isNotEmpty && msgs.any((m) => m["sender"]?.toString().toLowerCase() == "admin");
+        default:
+          return true;
+      }
+    }).toList();
+
+    return ScreenUtilInit(
+>>>>>>> de88c39 (Update project with latest changes and bug fixes)
       designSize: const Size(390, 844),
       minTextAdapt: true,
       builder: (context, child) => Scaffold(
+        floatingActionButton: (_isSelectionMode && _selectedItemIds.isNotEmpty)
+            ? FloatingActionButton.extended(
+                onPressed: _showShareOptionsSheet,
+                label: Text("Share (${_selectedItemIds.length})"),
+                icon: const Icon(Icons.share_rounded),
+                backgroundColor: Theme.of(context).colorScheme.primary,
+              )
+            : null,
         drawer: Drawer(
           backgroundColor: isDarkMode ? const Color(0xFF151B2C) : Colors.white,
           child: ListView(
@@ -1404,6 +1540,59 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                 ),
                               ),
                             ),
+                            SizedBox(width: 8.w),
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (_) => const OthersCategoryScreen()),
+                                  );
+                                },
+                                child: Container(
+                                  padding: EdgeInsets.symmetric(vertical: 10.h, horizontal: 8.w),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(14.r),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        "Others",
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 10.sp,
+                                          color: Colors.white.withOpacity(0.7),
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      SizedBox(height: 2.h),
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              "Filter",
+                                              style: GoogleFonts.outfit(
+                                                fontSize: 13.sp,
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.w900,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          Icon(
+                                            Icons.arrow_forward_ios_rounded,
+                                            size: 10.r,
+                                            color: Colors.white70,
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ],
@@ -1504,6 +1693,123 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     ),
                   ),
 
+                  // Chats and Unread Messages Row
+                  Padding(
+                    padding: EdgeInsets.only(bottom: 24.h),
+                    child: GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const ChatsListScreen(),
+                          ),
+                        ).then((_) {
+                          _loadData();
+                        });
+                      },
+                      child: Container(
+                        width: double.infinity,
+                        padding: EdgeInsets.symmetric(vertical: 16.h, horizontal: 20.w),
+                        decoration: BoxDecoration(
+                          color: isDarkMode ? const Color(0xFF1E293B) : Colors.white,
+                          borderRadius: BorderRadius.circular(16.r),
+                          border: Border.all(
+                            color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+                            width: 1.5,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Theme.of(context).colorScheme.primary.withOpacity(0.08),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: EdgeInsets.all(10.r),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                Icons.forum_rounded,
+                                size: 24.r,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                            ),
+                            SizedBox(width: 16.w),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    "Active Chat Threads",
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 15.sp,
+                                      fontWeight: FontWeight.bold,
+                                      color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                                    ),
+                                  ),
+                                  SizedBox(height: 2.h),
+                                  Text(
+                                    "Monitor messages & pending customer replies",
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 11.sp,
+                                      color: isDarkMode ? const Color(0xFF94A3B8) : const Color(0xFF475569),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Builder(
+                              builder: (context) {
+                                int pendingCount = 0;
+                                final allItemIds = [
+                                  ..._dashboardOrders.map((o) => o["id"]),
+                                  ..._dashboardEnquiries.map((e) => e["id"]),
+                                  ..._dashboardSectors.map((s) => s["id"])
+                                ];
+                                for (var itemId in allItemIds) {
+                                  if (itemId == null) continue;
+                                  final id = itemId is int ? itemId : int.tryParse(itemId.toString()) ?? 0;
+                                  final msgs = _chatMessages[id] ?? [];
+                                  if (msgs.isNotEmpty && msgs.last["sender"]?.toString().toLowerCase() != "admin") {
+                                    pendingCount++;
+                                  }
+                                }
+
+                                if (pendingCount > 0) {
+                                  return Container(
+                                    padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 4.h),
+                                    decoration: BoxDecoration(
+                                      color: Colors.redAccent,
+                                      borderRadius: BorderRadius.circular(12.r),
+                                    ),
+                                    child: Text(
+                                      "$pendingCount New",
+                                      style: GoogleFonts.outfit(
+                                        fontSize: 10.sp,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  );
+                                }
+                                return Icon(
+                                  Icons.arrow_forward_ios_rounded,
+                                  size: 14.r,
+                                  color: Colors.grey.shade400,
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+
                   // Live Workspace / Feed Section
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1527,6 +1833,55 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     ],
                   ),
                   SizedBox(height: 10.h),
+                  if (_isSelectionMode) ...[
+                    Container(
+                      padding: EdgeInsets.symmetric(vertical: 4.h, horizontal: 10.w),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primary.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(12.r),
+                        border: Border.all(color: Theme.of(context).colorScheme.primary.withOpacity(0.15)),
+                      ),
+                      child: Row(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded, color: Colors.red),
+                            onPressed: _cancelSelectionMode,
+                            tooltip: "Cancel Selection",
+                            constraints: const BoxConstraints(),
+                            padding: EdgeInsets.zero,
+                          ),
+                          SizedBox(width: 8.w),
+                          Text(
+                            "${_selectedItemIds.length} Selected",
+                            style: GoogleFonts.outfit(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12.sp,
+                              color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                            ),
+                          ),
+                          const Spacer(),
+                          TextButton(
+                            onPressed: () => _selectAllItems(filtered),
+                            style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero),
+                            child: Text(
+                              "Select All",
+                              style: GoogleFonts.outfit(fontSize: 12.sp, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          SizedBox(width: 12.w),
+                          TextButton(
+                            onPressed: _deselectAllItems,
+                            style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero),
+                            child: Text(
+                              "Clear",
+                              style: GoogleFonts.outfit(fontSize: 12.sp, fontWeight: FontWeight.bold, color: Colors.orange),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(height: 10.h),
+                  ],
 
                   // Segmented Control (Feed Selector: Bulk Orders vs Enquiries vs Sectors)
                   Container(
@@ -1543,6 +1898,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             onTap: () {
                               setState(() {
                                 _feedType = "orders";
+                                _isSelectionMode = false;
+                                _selectedItemIds.clear();
                               });
                             },
                             child: Container(
@@ -1581,6 +1938,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             onTap: () {
                               setState(() {
                                 _feedType = "enquiries";
+                                _isSelectionMode = false;
+                                _selectedItemIds.clear();
                               });
                             },
                             child: Container(
@@ -1619,6 +1978,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             onTap: () {
                               setState(() {
                                 _feedType = "sectors";
+                                _isSelectionMode = false;
+                                _selectedItemIds.clear();
                               });
                             },
                             child: Container(
@@ -1672,8 +2033,66 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         _buildFilterChip("Reply Received", "received"),
                         SizedBox(width: 8.w),
                         _buildFilterChip("Sent Reply", "sent"),
+                        SizedBox(width: 8.w),
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const OthersCategoryScreen()),
+                            );
+                          },
+                          child: Container(
+                            padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 8.h),
+                            decoration: BoxDecoration(
+                              color: isDarkMode ? const Color(0xFF1E293B) : Colors.white,
+                              borderRadius: BorderRadius.circular(20.r),
+                              border: Border.all(
+                                color: isDarkMode ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  "Others",
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 12.sp,
+                                    color: isDarkMode ? Colors.white70 : Colors.black87,
+                                  ),
+                                ),
+                                SizedBox(width: 4.w),
+                                Icon(
+                                  Icons.arrow_forward_rounded,
+                                  size: 12.r,
+                                  color: isDarkMode ? Colors.white54 : Colors.black54,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                       ],
                     ),
+                  ),
+                  SizedBox(height: 12.h),
+
+                   MultiSelectCategoryDropdown(
+                    categories: _currentFeedCategories,
+                    selectedCategories: _feedType == "orders"
+                        ? _selectedOrdersCategories
+                        : (_feedType == "enquiries" ? _selectedEnquiriesCategories : _selectedSectorsCategories),
+                    module: _feedType == "orders" ? "bulk_order" : _feedType == "enquiries" ? "enquiry" : "sector",
+                    hint: "Filter by Categories",
+                    onChanged: (selected) {
+                      setState(() {
+                        if (_feedType == "orders") {
+                          _selectedOrdersCategories = selected;
+                        } else if (_feedType == "enquiries") {
+                          _selectedEnquiriesCategories = selected;
+                        } else {
+                          _selectedSectorsCategories = selected;
+                        }
+                      });
+                    },
                   ),
                   SizedBox(height: 12.h),
 
@@ -1720,7 +2139,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         )
                       : Column(
                           children: [
-                            _buildFeedList(isDarkMode),
+                            _buildFeedList(isDarkMode, filtered),
                             if (_isLoadingMore)
                               Padding(
                                 padding: EdgeInsets.symmetric(vertical: 16.h),
@@ -1777,6 +2196,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
+<<<<<<< HEAD
   Widget _buildFeedList(bool isDarkMode) {
     final items = _feedType == "orders"
         ? _dashboardOrders
@@ -1819,6 +2239,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       }
     }).toList();
 
+=======
+  Widget _buildFeedList(bool isDarkMode, List<dynamic> filtered) {
+>>>>>>> de88c39 (Update project with latest changes and bug fixes)
     if (filtered.isEmpty) {
       return Center(
         child: Padding(
@@ -1889,6 +2312,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           ),
           child: ListTile(
             contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+            leading: _isSelectionMode
+                ? Checkbox(
+                    value: _selectedItemIds.contains(id),
+                    activeColor: Theme.of(context).colorScheme.primary,
+                    onChanged: (val) {
+                      _toggleItemSelection(id);
+                    },
+                  )
+                : null,
             title: Row(
               children: [
                 Expanded(
@@ -1966,7 +2398,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ],
             ),
             trailing: Icon(Icons.arrow_forward_ios_rounded, size: 14.r, color: isDarkMode ? Colors.white38 : Colors.black38),
-            onTap: () => _showFeedItemDetails(item, _feedType),
+            onTap: _isSelectionMode
+                ? () => _toggleItemSelection(id)
+                : () => _showFeedItemDetails(item, _feedType),
+            onLongPress: () {
+              setState(() {
+                _isSelectionMode = true;
+                _selectedItemIds.add(id);
+              });
+            },
           ),
         );
       },
@@ -2178,4 +2618,334 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       ),
     );
   }
+
+  void _toggleItemSelection(int id) {
+    setState(() {
+      if (_selectedItemIds.contains(id)) {
+        _selectedItemIds.remove(id);
+        if (_selectedItemIds.isEmpty) {
+          _isSelectionMode = false;
+        }
+      } else {
+        _selectedItemIds.add(id);
+      }
+    });
+  }
+
+  void _selectAllItems(List<dynamic> filteredItems) {
+    setState(() {
+      for (final item in filteredItems) {
+        final id = item["id"] is int ? item["id"] : int.tryParse(item["id"].toString()) ?? 0;
+        _selectedItemIds.add(id);
+      }
+      _isSelectionMode = true;
+    });
+  }
+
+  void _deselectAllItems() {
+    setState(() {
+      _selectedItemIds.clear();
+    });
+  }
+
+  void _cancelSelectionMode() {
+    setState(() {
+      _isSelectionMode = false;
+      _selectedItemIds.clear();
+    });
+  }
+
+  String _formatSelectedItemsSummary() {
+    final items = _feedType == "orders"
+        ? _dashboardOrders
+        : (_feedType == "enquiries" ? _dashboardEnquiries : _dashboardSectors);
+    final selected = items.where((item) {
+      final id = item["id"] is int ? item["id"] : int.tryParse(item["id"].toString()) ?? 0;
+      return _selectedItemIds.contains(id);
+    }).toList();
+
+    final buffer = StringBuffer();
+    if (_feedType == "orders") {
+      buffer.writeln("📦 srivagroups.in - Bulk Orders:");
+      for (int i = 0; i < selected.length; i++) {
+        final o = selected[i];
+        buffer.writeln("${i + 1}. Client: ${o['name'] ?? 'N/A'}");
+        buffer.writeln("   Product: ${o['product'] ?? 'N/A'} (Qty: ${o['quantity'] ?? 'N/A'})");
+        buffer.writeln("   Company: ${o['company'] ?? 'N/A'}");
+        if (o['specialInstructions'] != null && o['specialInstructions'] != "N/A") {
+          buffer.writeln("   Instructions: ${o['specialInstructions']}");
+        }
+        buffer.writeln("");
+      }
+    } else if (_feedType == "enquiries") {
+      buffer.writeln("💬 srivagroups.in - Enquiries:");
+      for (int i = 0; i < selected.length; i++) {
+        final e = selected[i];
+        buffer.writeln("${i + 1}. Client: ${e['name'] ?? 'N/A'}");
+        buffer.writeln("   Product: ${e['product'] ?? 'N/A'}");
+        buffer.writeln("   Subject: ${e['subject'] ?? 'N/A'}");
+        if (e['message'] != null && e['message'] != "N/A") {
+          buffer.writeln("   Message: ${e['message']}");
+        }
+        buffer.writeln("");
+      }
+    } else {
+      buffer.writeln("🏢 srivagroups.in - Sectors / Products:");
+      for (int i = 0; i < selected.length; i++) {
+        final s = selected[i];
+        buffer.writeln("${i + 1}. Title: ${s['product'] ?? 'N/A'}");
+        buffer.writeln("   Category: ${s['company'] ?? 'N/A'}");
+        if (s['price'] != null && s['price'] != "N/A") {
+          buffer.writeln("   Price: ${s['price']}");
+        }
+        buffer.writeln("");
+      }
+    }
+    return buffer.toString().trim();
+  }
+
+  void _showShareOptionsSheet() {
+    final shareText = _formatSelectedItemsSummary();
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          decoration: BoxDecoration(
+            color: isDarkMode ? const Color(0xFF0F172A) : Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24.r)),
+          ),
+          padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40.w,
+                  height: 4.h,
+                  decoration: BoxDecoration(
+                    color: isDarkMode ? Colors.white24 : Colors.black12,
+                    borderRadius: BorderRadius.circular(2.r),
+                  ),
+                ),
+              ),
+              SizedBox(height: 16.h),
+              Text(
+                "Share Selected (${_selectedItemIds.length})",
+                style: GoogleFonts.outfit(
+                  fontSize: 16.sp,
+                  fontWeight: FontWeight.w900,
+                  color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                ),
+              ),
+              SizedBox(height: 20.h),
+              ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: const Color(0xFF25D366).withOpacity(0.12),
+                  child: const Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFF25D366)),
+                ),
+                title: Text("Share via WhatsApp", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final url = "https://wa.me/?text=${Uri.encodeComponent(shareText)}";
+                  await _launchUrl(url);
+                },
+              ),
+              ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: Colors.blue.withOpacity(0.12),
+                  child: const Icon(Icons.sms_rounded, color: Colors.blue),
+                ),
+                title: Text("Share via SMS", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final url = "sms:?body=${Uri.encodeComponent(shareText)}";
+                  await _launchUrl(url);
+                },
+              ),
+              ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: Colors.red.withOpacity(0.12),
+                  child: const Icon(Icons.email_rounded, color: Colors.red),
+                ),
+                title: Text("Share via Gmail / Email", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                onTap: () async {
+                  Navigator.pop(context);
+                  final url = "mailto:?subject=${Uri.encodeComponent('Shared ${ _feedType == 'orders' ? 'Bulk Orders' : _feedType == 'enquiries' ? 'Enquiries' : 'Sectors' }')}&body=${Uri.encodeComponent(shareText)}";
+                  await _launchUrl(url);
+                },
+              ),
+              ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: const Color(0xFF6366F1).withOpacity(0.12),
+                  child: const Icon(Icons.forum_rounded, color: Color(0xFF6366F1)),
+                ),
+                title: Text("Share to Internal Chat", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _shareToInternalChat(shareText);
+                },
+              ),
+              ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: Colors.orange.withOpacity(0.12),
+                  child: const Icon(Icons.share_rounded, color: Colors.orange),
+                ),
+                title: Text("Share via Other Apps", style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                onTap: () {
+                  Navigator.pop(context);
+                  SharingIntentHandler.shareTextExternally(shareText);
+                },
+              ),
+              SizedBox(height: 16.h),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _shareToInternalChat(String shareText) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          height: MediaQuery.of(context).size.height * 0.7,
+          decoration: BoxDecoration(
+            color: isDarkMode ? const Color(0xFF0F172A) : Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24.r)),
+          ),
+          padding: EdgeInsets.symmetric(horizontal: 20.w, vertical: 16.h),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40.w,
+                  height: 4.h,
+                  decoration: BoxDecoration(
+                    color: isDarkMode ? Colors.white24 : Colors.black12,
+                    borderRadius: BorderRadius.circular(2.r),
+                  ),
+                ),
+              ),
+              SizedBox(height: 16.h),
+              Text(
+                "Share to Internal Chat",
+                style: GoogleFonts.outfit(
+                  fontSize: 16.sp,
+                  fontWeight: FontWeight.w800,
+                  color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                ),
+              ),
+              SizedBox(height: 12.h),
+              Expanded(
+                child: DefaultTabController(
+                  length: 3,
+                  child: Column(
+                    children: [
+                      TabBar(
+                        labelColor: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                        unselectedLabelColor: isDarkMode ? Colors.white54 : Colors.black54,
+                        indicatorColor: Theme.of(context).colorScheme.primary,
+                        tabs: const [
+                          Tab(text: "Orders"),
+                          Tab(text: "Enquiries"),
+                          Tab(text: "Sectors"),
+                        ],
+                      ),
+                      SizedBox(height: 10.h),
+                      Expanded(
+                        child: TabBarView(
+                          children: [
+                            _buildThreadSelectorList("bulk_order", _dashboardOrders, shareText),
+                            _buildThreadSelectorList("enquiry", _dashboardEnquiries, shareText),
+                            _buildThreadSelectorList("sector", _dashboardSectors, shareText),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildThreadSelectorList(String module, List<dynamic> items, String shareText) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    if (items.isEmpty) {
+      return Center(
+        child: Text(
+          "No threads available",
+          style: GoogleFonts.outfit(
+            fontSize: 12.sp,
+            color: isDarkMode ? Colors.white38 : Colors.black38,
+          ),
+        ),
+      );
+    }
+    return ListView.builder(
+      itemCount: items.length,
+      itemBuilder: (context, index) {
+        final item = items[index];
+        final id = item["id"] is int ? item["id"] : int.tryParse(item["id"].toString()) ?? 0;
+        final name = item["name"] ?? "N/A";
+        final product = item["product"] ?? "N/A";
+        return ListTile(
+          title: Text(
+            name,
+            style: GoogleFonts.outfit(
+              fontSize: 13.sp,
+              fontWeight: FontWeight.bold,
+              color: isDarkMode ? Colors.white : const Color(0xFF0F172A),
+            ),
+          ),
+          subtitle: Text(
+            product,
+            style: GoogleFonts.outfit(
+              fontSize: 11.sp,
+              color: isDarkMode ? Colors.white54 : Colors.black54,
+            ),
+          ),
+          trailing: Icon(Icons.send_rounded, size: 18.r, color: Theme.of(context).colorScheme.primary),
+          onTap: () {
+            Navigator.pop(context);
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ChatScreen(
+                  module: module,
+                  referenceId: id,
+                  userName: name,
+                  initialSharedText: shareText,
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _launchUrl(String urlString) async {
+    try {
+      final uri = Uri.parse(urlString);
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      debugPrint("[DashboardScreen] Could not launch URL: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Could not open application for sharing: $e")),
+      );
+    }
+  }
 }
+

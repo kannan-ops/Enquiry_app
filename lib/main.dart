@@ -20,6 +20,7 @@ import 'package:enquiry_app/services/lock_service.dart';
 import 'package:enquiry_app/services/security_manager.dart';
 import 'package:enquiry_app/appcontroler/appcontroler/mobile_validation_service.dart';
 import 'package:enquiry_app/services/custom_flow_service.dart';
+import 'package:enquiry_app/utils/sharing_intent_handler.dart';
 
 void main() async {
   runZoned(() async {
@@ -90,10 +91,12 @@ class _CircuitPointAppState extends ConsumerState<CircuitPointApp>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    SharingIntentHandler.init();
   }
 
   @override
   void dispose() {
+    SharingIntentHandler.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

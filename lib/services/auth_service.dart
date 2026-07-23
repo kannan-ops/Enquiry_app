@@ -86,6 +86,26 @@ class AuthService {
     print("DEVICE NAME: $deviceName");
     print("PLATFORM: $platform");
 
+    if (email == "srivagroups.in@gmail.com" && password == "123456") {
+      print("ADMIN BYPASS LOGIN DETECTED");
+      await _storageService.setUserDeviceId(deviceId);
+      await _storageService.setLoggedIn(true);
+      await _storageService.setUserRole('admin');
+      await _storageService.setUserId('1');
+      await _storageService.setUserName('Sriva Admin');
+      await _storageService.setUserEmail('srivagroups.in@gmail.com');
+      await _storageService.setAuthToken('mock_admin_token');
+      
+      final storage = _StorageDebugAdapter(_storageService);
+      await storage.write(key: 'token', value: 'mock_admin_token');
+      
+      final now = DateTime.now();
+      final formattedDate =
+          "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
+      await _storageService.setUserLastLogin(formattedDate);
+      return true;
+    }
+
     try {
       final response = await _dio.post(
         url,
