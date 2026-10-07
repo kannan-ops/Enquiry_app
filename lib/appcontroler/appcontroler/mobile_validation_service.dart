@@ -169,6 +169,7 @@ class MobileValidationService {
       "version": version,
       "software_version": softwareVersion,
       "app_id": "USERAPP-95386",
+      "app_name": localDetails['app_name'] ?? 'Payment App',
     };
 
     final Map<String, String> headers = {"Content-Type": "application/json"};
@@ -188,7 +189,7 @@ class MobileValidationService {
       print("Sending app_id: USERAPP-95386");
       final response = await client
           .post(url, headers: headers, body: jsonEncode(body))
-          .timeout(const Duration(seconds: 15));
+          .timeout(const Duration(seconds: 3));
 
       final duration = DateTime.now().difference(startTime);
 

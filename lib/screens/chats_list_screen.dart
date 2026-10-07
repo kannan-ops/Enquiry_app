@@ -115,8 +115,17 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
 
             messageFutures.add(() async {
               try {
-                final url = "https://bulk.srivagroups.in/api/messages/$module/$id";
-                final res = await ApiDebugLogger.httpClient.get(Uri.parse(url));
+                var url = "https://whatsapp.srivagroups.in/conversation.php?module=$module&reference_id=$id";
+                var res;
+                try {
+                  res = await ApiDebugLogger.httpClient.get(Uri.parse(url)).timeout(const Duration(seconds: 5));
+                  if (res.statusCode != 200) {
+                    throw Exception("Not 200");
+                  }
+                } catch (_) {
+                  url = "https://bulk.srivagroups.in/api/messages/$module/$id";
+                  res = await ApiDebugLogger.httpClient.get(Uri.parse(url));
+                }
                 if (res.statusCode == 200) {
                   final decoded = jsonDecode(res.body);
                   List<dynamic> msgs = _extractList(decoded);
@@ -448,7 +457,7 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
         Color moduleColor = const Color(0xFF3B5BDB);
         if (chat["module"] == "enquiry") {
           moduleColor = const Color(0xFF10B981);
-        } else if (chat["module"] == "sector") {
+        } else if (chat["module"] == "sector" || chat["module"] == "product") {
           moduleColor = const Color(0xFFF59E0B);
         }
 
@@ -505,7 +514,7 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
                           children: [
                             Expanded(
                               child: Text(
-                                chat["name"],
+                                "${chat["name"]} (${chat["phone"]})",
                                 style: GoogleFonts.outfit(
                                   fontSize: 15.sp,
                                   fontWeight: FontWeight.bold,
@@ -518,30 +527,46 @@ class _ChatsListScreenState extends State<ChatsListScreen> {
                             Text(
                               _formatTime(chat["timestamp"]),
                               style: GoogleFonts.outfit(
-                                fontSize: 11.sp,
-                                color: Colors.grey.shade500,
-                              ),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: 4.h),
-                        Row(
-                          children: [
-                            Container(
-                              padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
-                              decoration: BoxDecoration(
-                                color: moduleColor.withOpacity(0.12),
-                                borderRadius: BorderRadius.circular(6.r),
-                              ),
-                              child: Text(
-                                moduleLabel,
-                                style: GoogleFonts.outfit(
-                                  fontSize: 9.sp,
-                                  fontWeight: FontWeight.w800,
-                                  color: moduleColor,
+                                  fontSize: 11.sp,
+                                  color: Colors.grey.shade500,
                                 ),
                               ),
-                            ),
+                            ],
+                          ),
+                          SizedBox(height: 4.h),
+                          Row(
+                            children: [
+                              Container(
+                                padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
+                                decoration: BoxDecoration(
+                                  color: moduleColor.withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(6.r),
+                                ),
+                                child: Text(
+                                  moduleLabel,
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 9.sp,
+                                    fontWeight: FontWeight.w800,
+                                    color: moduleColor,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: EdgeInsets.symmetric(horizontal: 6.w, vertical: 2.h),
+                                decoration: BoxDecoration(
+                                  color: isUnread ? Colors.red.withOpacity(0.12) : Colors.green.withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(6.r),
+                                ),
+                                child: Text(
+                                  isUnread ? "Pending Reply" : "Replied",
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 9.sp,
+                                    fontWeight: FontWeight.w800,
+                                    color: isUnread ? Colors.red : Colors.green,
+                                  ),
+                                ),
+                              ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(

@@ -274,7 +274,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
         debugPrint("[VersionCheck] Stacktrace: $stack");
       }
 
-      if (storageService.isLoggedIn) {
+      if (storageService.isSessionValid) {
         final int userIdInt = int.tryParse(storageService.userId) ?? 12;
         await securityManager.initializeSecurity(userIdInt).timeout(
           const Duration(seconds: 3),
@@ -296,7 +296,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
       if (!mounted) return;
       Widget nextScreen;
-      if (storageService.isLoggedIn) {
+      if (storageService.isSessionValid) {
         if (securityManager.isAnyLockEnabled()) {
           nextScreen = const AppLockScreen(
             isStartupBlocker: true,

@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:enquiry_app/utils/api_debug_logger.dart';
+import 'package:http/http.dart' as http;
 
 class ReplyFormDialog extends StatefulWidget {
   final String phone;
@@ -43,6 +44,12 @@ class _ReplyFormDialogState extends State<ReplyFormDialog> {
 
   String? _selectedImagePath;
   String? _selectedFilePath;
+  
+  // Status tracking variables
+  String? _emailStatus;
+  String? _whatsappStatus;
+  String? _smsStatus;
+  bool? _isSuccess;
 
   @override
   void initState() {
@@ -505,6 +512,10 @@ class _ReplyFormDialogState extends State<ReplyFormDialog> {
 
     setState(() {
       _isSending = true;
+      _emailStatus = _sendGmail ? "Sending..." : null;
+      _whatsappStatus = _sendWhatsApp ? "Sending..." : null;
+      _smsStatus = _sendSMS ? "Sending..." : null;
+      _isSuccess = null;
     });
 
     String attachmentInfo = "";
@@ -520,83 +531,150 @@ class _ReplyFormDialogState extends State<ReplyFormDialog> {
     final fullMessage = "$dearText,\n\nSubject: $subjectText\n\n$conceptText$attachmentInfo\n\nChat link to reply:\n$_chatLink";
 
     final List<String> channels = [];
-    if (_sendWhatsApp) channels.add("WhatsApp");
-    if (_sendGmail) channels.add("Email");
+    if (_sendGmail) channels.add("EMAIL");
+    if (_sendWhatsApp) channels.add("WHATSAPP");
     if (_sendSMS) channels.add("SMS");
     
-    final savedMessage = "$fullMessage\n\n[via:${channels.join(',')}]";
-
-    // 1. Save message to chat database API
-    final url = "https://bulk.srivagroups.in/api/messages";
-    final body = {
-      "module": widget.module,
-      "reference_id": widget.referenceId,
-      "sender": "admin",
-      "message": savedMessage,
-    };
-
+    print("=== REPLY SUBMIT START ===");
+    
     try {
-      await ApiDebugLogger.httpClient.post(
+      // 1. Create/Get User
+      int? userId;
+      final userUrl = "https://receivedchat.srivagroups.in/api/users";
+      
+      final nameParts = widget.name.split(' ');
+      final userBody = {
+        "first_name": nameParts.isNotEmpty ? nameParts.first : "User",
+        "last_name": nameParts.length > 1 ? nameParts.sublist(1).join(' ') : "",
+        "email": widget.email.isEmpty ? "unknown@example.com" : widget.email,
+        "phone": widget.phone.replaceAll(RegExp(r'\D'), ''),
+        "role": "CUSTOMER",
+      };
+
+      try {
+        final userRes = await http.post(
+          Uri.parse(userUrl),
+          headers: {"Content-Type": "application/json"},
+          body: jsonEncode(userBody),
+        ).timeout(const Duration(seconds: 15));
+        
+        print("=== USER API ===");
+        print("STATUS: ${userRes.statusCode}");
+        print("BODY: ${userRes.body}");
+        
+        if (userRes.statusCode == 200 || userRes.statusCode == 201) {
+          final decoded = jsonDecode(userRes.body);
+          if (decoded['data'] != null && decoded['data']['user_id'] != null) {
+            userId = decoded['data']['user_id'] is int 
+                ? decoded['data']['user_id'] 
+                : int.tryParse(decoded['data']['user_id'].toString());
+          } else if (decoded['user'] != null && decoded['user']['id'] != null) {
+            userId = decoded['user']['id'] is int
+                ? decoded['user']['id']
+                : int.tryParse(decoded['user']['id'].toString());
+          } else if (decoded['id'] != null) {
+            userId = decoded['id'] is int
+                ? decoded['id']
+                : int.tryParse(decoded['id'].toString());
+          }
+        } else {
+          throw Exception("Backend User API failed: ${userRes.statusCode} - ${userRes.body}");
+        }
+      } catch (e) {
+        print("Error calling user API: $e");
+        rethrow;
+      }
+      
+      if (userId == null) {
+        throw Exception("Could not fetch user ID from backend.");
+      }
+      
+      print("=== USER ID ===");
+      print("USER_ID: $userId");
+
+      // 2. Call Omnichannel API
+      final url = "https://receivedchat.srivagroups.in/api/conversations/send";
+      final body = {
+        "user_id": userId,
+        "subject": subjectText,
+        "message": fullMessage,
+        "channels": channels,
+      };
+
+      print("=== OMNICHANNEL REQUEST ===");
+      print("URL: $url");
+      print("METHOD: POST");
+      print("BODY: $body");
+
+      final response = await http.post(
         Uri.parse(url),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode(body),
-      );
-    } catch (_) {}
+      ).timeout(const Duration(seconds: 15));
+      
+      print("=== OMNICHANNEL RESPONSE ===");
+      print("STATUS: ${response.statusCode}");
+      print("BODY: ${response.body}");
 
-    // 2. Open WhatsApp
-    if (_sendWhatsApp) {
-      var cleanPhone = widget.phone.replaceAll(RegExp(r'\D'), '');
-      if (cleanPhone.length == 10) {
-        cleanPhone = "91$cleanPhone";
-      }
-      final waUri = Uri.parse("whatsapp://send?phone=$cleanPhone&text=${Uri.encodeComponent(fullMessage)}");
-      try {
-        await launchUrl(waUri, mode: LaunchMode.externalApplication);
-      } catch (_) {
-        final waFallback = Uri.parse("https://wa.me/$cleanPhone?text=${Uri.encodeComponent(fullMessage)}");
-        await launchUrl(waFallback, mode: LaunchMode.externalApplication).catchError((_) => false);
+      bool isSuccess = false;
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final apiResponse = jsonDecode(response.body);
+        isSuccess = apiResponse['success'] == true;
+        
+        setState(() {
+          if (apiResponse['data'] != null && apiResponse['data']['channels'] != null) {
+            final channelsData = apiResponse['data']['channels'] as List;
+            for (var ch in channelsData) {
+              String chName = ch['channel'] ?? '';
+              String chStatus = ch['status'] ?? '';
+              if (chName == 'EMAIL') _emailStatus = chStatus;
+              else if (chName == 'WHATSAPP') _whatsappStatus = chStatus;
+              else if (chName == 'SMS') _smsStatus = chStatus;
+            }
+          } else if (!isSuccess) {
+            if (_sendGmail) _emailStatus = "FAILED";
+            if (_sendWhatsApp) _whatsappStatus = "FAILED";
+            if (_sendSMS) _smsStatus = "FAILED";
+          }
+          _isSuccess = isSuccess;
+        });
+      } else {
+        setState(() {
+          if (_sendGmail) _emailStatus = "FAILED";
+          if (_sendWhatsApp) _whatsappStatus = "FAILED";
+          if (_sendSMS) _smsStatus = "FAILED";
+          _isSuccess = false;
+        });
       }
 
-      if (_sendGmail || _sendSMS) {
-        await Future.delayed(const Duration(milliseconds: 1200));
-      }
-    }
+      print("=== EMAIL STATUS ===");
+      print(_emailStatus ?? "NOT SELECTED");
+      print("=== WHATSAPP STATUS ===");
+      print(_whatsappStatus ?? "NOT SELECTED");
+      print("=== SMS STATUS ===");
+      print(_smsStatus ?? "NOT SELECTED");
 
-    // 3. Open Email
-    if (_sendGmail) {
-      final String emailSubject = Uri.encodeComponent(subjectText);
-      final String emailBody = Uri.encodeComponent(fullMessage);
-      final Uri mailUri = Uri.parse("mailto:${widget.email}?subject=$emailSubject&body=$emailBody");
-      try {
-        await launchUrl(mailUri, mode: LaunchMode.externalApplication);
-      } catch (_) {
-        await launchUrl(mailUri).catchError((_) => false);
+      if (_isSuccess == true) {
+        print("=== REPLY SUBMIT SUCCESS ===");
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Submit Success'), backgroundColor: Colors.green),
+          );
+        }
+      } else {
+        print("=== REPLY FORM FAILED ===");
       }
-
-      if (_sendSMS) {
-        await Future.delayed(const Duration(milliseconds: 1200));
-      }
-    }
-
-    // 4. Open SMS
-    if (_sendSMS) {
-      final smsBody = "$subjectText\n\nChat: $_chatLink";
-      final Uri smsUri = Uri.parse("sms:${widget.phone}?body=${Uri.encodeComponent(smsBody)}");
-      try {
-        await launchUrl(smsUri, mode: LaunchMode.externalApplication);
-      } catch (_) {
-        await launchUrl(smsUri).catchError((_) => false);
-      }
-    }
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Reply sent and launchers executed!"),
-          backgroundColor: Colors.green,
-        ),
-      );
-      Navigator.pop(context, true);
+    } catch (e) {
+      setState(() {
+        if (_sendGmail) _emailStatus = "FAILED";
+        if (_sendWhatsApp) _whatsappStatus = "FAILED";
+        if (_sendSMS) _smsStatus = "FAILED";
+        _isSuccess = false;
+      });
+      print("=== REPLY FORM FAILED ===");
+      print("ERROR: $e");
+    } finally {
+      if (mounted) setState(() => _isSending = false);
     }
   }
 
@@ -944,6 +1022,29 @@ class _ReplyFormDialogState extends State<ReplyFormDialog> {
                 ],
               ),
               const SizedBox(height: 16),
+              
+              if (_emailStatus != null || _whatsappStatus != null || _smsStatus != null) ...[
+                const SizedBox(height: 16),
+                const Divider(),
+                const SizedBox(height: 8),
+                if (_emailStatus != null) _buildStatusRow("Email", _emailStatus!),
+                if (_whatsappStatus != null) _buildStatusRow("WhatsApp", _whatsappStatus!),
+                if (_smsStatus != null) _buildStatusRow("SMS", _smsStatus!),
+                const SizedBox(height: 8),
+                if (_isSuccess != null)
+                  Center(
+                    child: Text(
+                      _isSuccess! ? "✅ Submit Success" : "❌ Submit Failed",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: _isSuccess! ? Colors.green : Colors.red,
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 8),
+                const Divider(),
+              ],
 
               // Actions
               Row(
@@ -1004,6 +1105,40 @@ class _ReplyFormDialogState extends State<ReplyFormDialog> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildStatusRow(String channel, String status) {
+    IconData icon;
+    Color color;
+
+    if (status == "Sending...") {
+      icon = Icons.hourglass_empty;
+      color = Colors.orange;
+    } else if (status == "SENT") {
+      icon = Icons.check_circle;
+      color = Colors.green;
+    } else {
+      icon = Icons.cancel;
+      color = Colors.red;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(width: 8),
+          Text(
+            "$channel: ",
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+          ),
+          Text(
+            status == "SENT" ? "✅ Sent" : (status == "FAILED" ? "❌ Failed" : "⏳ $status"),
+            style: TextStyle(color: color, fontSize: 14),
+          ),
+        ],
       ),
     );
   }

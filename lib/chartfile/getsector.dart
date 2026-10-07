@@ -58,9 +58,19 @@ class _GetByIdState extends State<GetById> {
         final id = item["id"] is int ? item["id"] : int.tryParse(item["id"].toString()) ?? 0;
         if (id == 0) return;
         
-        final url = "https://bulk.srivagroups.in/api/messages/$module/$id";
         try {
-          final res = await ApiDebugLogger.httpClient.get(Uri.parse(url)).timeout(const Duration(seconds: 5));
+          var url = "https://whatsapp.srivagroups.in/conversation.php?module=$module&reference_id=$id";
+          var res;
+          try {
+            res = await ApiDebugLogger.httpClient.get(Uri.parse(url)).timeout(const Duration(seconds: 5));
+            if (res.statusCode != 200) {
+              throw Exception("Not 200");
+            }
+          } catch (_) {
+            url = "https://bulk.srivagroups.in/api/messages/$module/$id";
+            res = await ApiDebugLogger.httpClient.get(Uri.parse(url)).timeout(const Duration(seconds: 5));
+          }
+
           if (res.statusCode == 200) {
             final decoded = jsonDecode(res.body);
             List<dynamic> msgs = [];
@@ -112,9 +122,18 @@ class _GetByIdState extends State<GetById> {
 
   Future<void> _checkSingleChatStatus(String module, int id) async {
     if (id == 0) return;
-    final url = "https://bulk.srivagroups.in/api/messages/$module/$id";
     try {
-      final res = await ApiDebugLogger.httpClient.get(Uri.parse(url)).timeout(const Duration(seconds: 5));
+      var url = "https://whatsapp.srivagroups.in/conversation.php?module=$module&reference_id=$id";
+      var res;
+      try {
+        res = await ApiDebugLogger.httpClient.get(Uri.parse(url)).timeout(const Duration(seconds: 5));
+        if (res.statusCode != 200) {
+          throw Exception("Not 200");
+        }
+      } catch (_) {
+        url = "https://bulk.srivagroups.in/api/messages/$module/$id";
+        res = await ApiDebugLogger.httpClient.get(Uri.parse(url)).timeout(const Duration(seconds: 5));
+      }
       if (res.statusCode == 200) {
         final decoded = jsonDecode(res.body);
         List<dynamic> msgs = [];
@@ -218,14 +237,14 @@ class _GetByIdState extends State<GetById> {
             final chunk = _allProducts.sublist(0, initialCount);
             _products.addAll(chunk);
             _hasMore = _products.length < _allProducts.length;
-            _fetchAllChatStatuses(chunk, "sector");
+            _fetchAllChatStatuses(chunk, "product");
           } else {
             _products.addAll(mapped);
             _currentPage++;
             if (rawList.length < _limit || (total > 0 && _products.length >= total)) {
               _hasMore = false;
             }
-            _fetchAllChatStatuses(mapped, "sector");
+            _fetchAllChatStatuses(mapped, "product");
           }
         }
       } else {
@@ -255,7 +274,7 @@ class _GetByIdState extends State<GetById> {
           _products.addAll(chunk);
           _hasMore = _products.length < _allProducts.length;
           
-          _fetchAllChatStatuses(chunk, "sector");
+          _fetchAllChatStatuses(chunk, "product");
           
           if (mounted) {
             setState(() {
@@ -314,7 +333,7 @@ class _GetByIdState extends State<GetById> {
               _hasMore = false;
             }
             
-            _fetchAllChatStatuses(mapped, "sector");
+            _fetchAllChatStatuses(mapped, "product");
             
             if (mounted) {
               setState(() {
@@ -1791,51 +1810,83 @@ class _GetByIdState extends State<GetById> {
                                               final msgs = _chatMessages[id];
                                               final bool isPending = msgs == null || !msgs.any((m) => m["sender"]?.toString().toLowerCase() == "admin");
                                               if (isPending) {
-                                                return Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.orange.shade50,
-                                                    borderRadius: BorderRadius.circular(12),
-                                                    border: Border.all(color: Colors.orange.shade300, width: 1),
-                                                  ),
-                                                  child: Row(
-                                                    mainAxisSize: MainAxisSize.min,
-                                                    children: [
-                                                      Icon(Icons.hourglass_empty_rounded, size: 12, color: Colors.orange.shade800),
-                                                      const SizedBox(width: 4),
-                                                      Text(
-                                                        "Pending Reply",
-                                                        style: TextStyle(
-                                                          fontSize: 10,
-                                                          fontWeight: FontWeight.bold,
-                                                          color: Colors.orange.shade800,
+                                                return InkWell(
+                                                  onTap: () {
+                                                    Navigator.push(
+                                                      context,
+                                                      MaterialPageRoute(
+                                                        builder: (context) => ChatScreen(
+                                                          referenceId: id,
+                                                          module: "sector",
+                                                          userName: p["name"] ?? "Client",
+                                                          userPhone: p["mobile"] ?? p["phone"] ?? "",
+                                                          userId: p["user_id"] != null ? int.tryParse(p["user_id"].toString()) : null,
                                                         ),
                                                       ),
-                                                    ],
+                                                    );
+                                                  },
+                                                  child: Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.orange.shade50,
+                                                      borderRadius: BorderRadius.circular(12),
+                                                      border: Border.all(color: Colors.orange.shade300, width: 1),
+                                                    ),
+                                                    child: Row(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: [
+                                                        Icon(Icons.hourglass_empty_rounded, size: 12, color: Colors.orange.shade800),
+                                                        const SizedBox(width: 4),
+                                                        Text(
+                                                          "Pending Reply",
+                                                          style: TextStyle(
+                                                            fontSize: 10,
+                                                            fontWeight: FontWeight.bold,
+                                                            color: Colors.orange.shade800,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
                                                   ),
                                                 );
                                               } else {
-                                                return Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.green.shade50,
-                                                    borderRadius: BorderRadius.circular(12),
-                                                    border: Border.all(color: Colors.green.shade300, width: 1),
-                                                  ),
-                                                  child: Row(
-                                                    mainAxisSize: MainAxisSize.min,
-                                                    children: [
-                                                      Icon(Icons.check_circle_outline_rounded, size: 12, color: Colors.green.shade800),
-                                                      const SizedBox(width: 4),
-                                                      Text(
-                                                        "Replied",
-                                                        style: TextStyle(
-                                                          fontSize: 10,
-                                                          fontWeight: FontWeight.bold,
-                                                          color: Colors.green.shade800,
+                                                return InkWell(
+                                                  onTap: () {
+                                                    Navigator.push(
+                                                      context,
+                                                      MaterialPageRoute(
+                                                        builder: (context) => ChatScreen(
+                                                          referenceId: id,
+                                                          module: "sector",
+                                                          userName: p["name"] ?? "Client",
+                                                          userPhone: p["mobile"] ?? p["phone"] ?? "",
+                                                          userId: p["user_id"] != null ? int.tryParse(p["user_id"].toString()) : null,
                                                         ),
                                                       ),
-                                                    ],
+                                                    );
+                                                  },
+                                                  child: Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.green.shade50,
+                                                      borderRadius: BorderRadius.circular(12),
+                                                      border: Border.all(color: Colors.green.shade300, width: 1),
+                                                    ),
+                                                    child: Row(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: [
+                                                        Icon(Icons.check_circle_outline_rounded, size: 12, color: Colors.green.shade800),
+                                                        const SizedBox(width: 4),
+                                                        Text(
+                                                          "Replied",
+                                                          style: TextStyle(
+                                                            fontSize: 10,
+                                                            fontWeight: FontWeight.bold,
+                                                            color: Colors.green.shade800,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
                                                   ),
                                                 );
                                               }
@@ -2009,7 +2060,7 @@ class _GetByIdState extends State<GetById> {
                                                       context: context,
                                                       builder: (context) => ReplyFormDialog(
                                                         referenceId: id,
-                                                        module: "sector",
+                                                        module: "product",
                                                         name: p["name"] ?? "Client",
                                                       company: "",
                                                         initialSubject: p["title"] ?? "Sector Product",
@@ -2022,7 +2073,7 @@ class _GetByIdState extends State<GetById> {
                                                         setState(() {
                                                           futureProducts = fetchProducts();
                                                         });
-                                                        _checkSingleChatStatus("sector", id);
+                                                        _checkSingleChatStatus("product", id);
                                                       }
                                                     });
                                                   },
@@ -2050,12 +2101,13 @@ class _GetByIdState extends State<GetById> {
                                                 MaterialPageRoute(
                                                   builder: (context) => ChatScreen(
                                                     referenceId: id,
-                                                    module: "sector",
+                                                    module: "product",
                                                     userName: p["name"] ?? "Client",
+                                                    userPhone: p["mobile"] ?? p["phone"] ?? "",
                                                   ),
                                                 ),
                                               ).then((_) {
-                                                _checkSingleChatStatus("sector", id);
+                                                _checkSingleChatStatus("product", id);
                                               });
                                             },
                                           ),

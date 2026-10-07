@@ -29,6 +29,7 @@ import 'package:enquiry_app/screens/others_category_screen.dart';
 import 'package:enquiry_app/utils/sharing_intent_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:enquiry_app/widgets/multi_select_category_dropdown.dart';
+import 'package:enquiry_app/modules/finance/finance_calculator_hub_screen.dart';
 
 import 'package:enquiry_app/services/storage_service.dart';
 import 'package:enquiry_app/services/auth_service.dart';
@@ -500,12 +501,21 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         final id = item["id"] is int ? item["id"] : int.tryParse(item["id"].toString()) ?? 0;
         if (id == 0) return;
         
-        final isOrder = _dashboardOrders.any((o) => o["id"] == id);
-        final isEnq = _dashboardEnquiries.any((e) => e["id"] == id);
-        final module = isOrder ? "bulk" : (isEnq ? "enq" : "sector");
-        final url = "https://bulk.srivagroups.in/api/messages/$module/$id";
         try {
-          final res = await ApiDebugLogger.httpClient.get(Uri.parse(url)).timeout(const Duration(seconds: 4));
+          final isOrder = _dashboardOrders.any((o) => o["id"] == id);
+          final isEnq = _dashboardEnquiries.any((e) => e["id"] == id);
+          final module = isOrder ? "bulk_order" : (isEnq ? "enquiry" : "product");
+          var url = "https://whatsapp.srivagroups.in/conversation.php?module=$module&reference_id=$id";
+          var res;
+          try {
+            res = await ApiDebugLogger.httpClient.get(Uri.parse(url)).timeout(const Duration(seconds: 4));
+            if (res.statusCode != 200) {
+              throw Exception("Not 200");
+            }
+          } catch (_) {
+            url = "https://bulk.srivagroups.in/api/messages/$module/$id";
+            res = await ApiDebugLogger.httpClient.get(Uri.parse(url)).timeout(const Duration(seconds: 4));
+          }
           if (res.statusCode == 200) {
             final decoded = jsonDecode(res.body);
             List<dynamic> msgs = [];
@@ -1143,6 +1153,26 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const GetById()),
+                  );
+                },
+              ),
+
+              ListTile(
+                leading: Icon(
+                  Icons.calculate_outlined,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+                title: Text(
+                  "Finance Calculators",
+                  style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
+                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const FinanceCalculatorHubScreen(),
+                    ),
                   );
                 },
               ),
@@ -2014,6 +2044,33 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             ),
                           ),
                         ),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const OthersCategoryScreen()),
+                              );
+                            },
+                            child: Container(
+                              padding: EdgeInsets.symmetric(vertical: 10.h),
+                              decoration: BoxDecoration(
+                                color: Colors.transparent,
+                                borderRadius: BorderRadius.circular(10.r),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  "Others",
+                                  style: GoogleFonts.outfit(
+                                    fontSize: 12.sp,
+                                    fontWeight: FontWeight.bold,
+                                    color: isDarkMode ? Colors.white54 : Colors.black54,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -2034,43 +2091,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         _buildFilterChip("Reply Received", "received"),
                         SizedBox(width: 8.w),
                         _buildFilterChip("Sent Reply", "sent"),
-                        SizedBox(width: 8.w),
-                        GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => const OthersCategoryScreen()),
-                            );
-                          },
-                          child: Container(
-                            padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 8.h),
-                            decoration: BoxDecoration(
-                              color: isDarkMode ? const Color(0xFF1E293B) : Colors.white,
-                              borderRadius: BorderRadius.circular(20.r),
-                              border: Border.all(
-                                color: isDarkMode ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  "Others",
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 12.sp,
-                                    color: isDarkMode ? Colors.white70 : Colors.black87,
-                                  ),
-                                ),
-                                SizedBox(width: 4.w),
-                                Icon(
-                                  Icons.arrow_forward_rounded,
-                                  size: 12.r,
-                                  color: isDarkMode ? Colors.white54 : Colors.black54,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
                       ],
                     ),
                   ),
@@ -2306,18 +2326,39 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       ),
                     ),
                   ),
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.h),
-                  decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(8.r),
-                  ),
-                  child: Text(
-                    statusLabel.toUpperCase(),
-                    style: GoogleFonts.outfit(
-                      fontSize: 9.sp,
-                      fontWeight: FontWeight.w800,
-                      color: statusColor,
+                GestureDetector(
+                  onTap: () {
+                    final phone = item["phone"] ?? item["mobile"] ?? "";
+                    String moduleStr = "enquiry";
+                    if (_feedType == "sectors") moduleStr = "sector";
+                    if (_feedType == "bulk") moduleStr = "bulk_order";
+                    
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ChatScreen(
+                          referenceId: id,
+                          module: moduleStr,
+                          userName: name,
+                          userPhone: phone,
+                          userId: item["user_id"] != null ? int.tryParse(item["user_id"].toString()) : null,
+                        ),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.h),
+                    decoration: BoxDecoration(
+                      color: statusColor.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(8.r),
+                    ),
+                    child: Text(
+                      statusLabel.toUpperCase(),
+                      style: GoogleFonts.outfit(
+                        fontSize: 9.sp,
+                        fontWeight: FontWeight.w800,
+                        color: statusColor,
+                      ),
                     ),
                   ),
                 ),

@@ -44,6 +44,7 @@ class ChatScreen extends StatefulWidget {
   final String? initialMessage;
   final List<String>? initialSharedFiles;
   final String? initialSharedText;
+  final int? userId;
 
   const ChatScreen({
     super.key,
@@ -54,6 +55,7 @@ class ChatScreen extends StatefulWidget {
     this.initialMessage,
     this.initialSharedFiles,
     this.initialSharedText,
+    this.userId,
   });
 
   @override
@@ -111,6 +113,9 @@ class _ChatScreenState extends State<ChatScreen> {
       await prefs.setString('last_chat_module', widget.module);
       await prefs.setInt('last_chat_reference_id', widget.referenceId);
       await prefs.setString('last_chat_user_name', widget.userName);
+      if (widget.userPhone != null) {
+        await prefs.setString('last_chat_user_phone', widget.userPhone!);
+      }
     } catch (_) {}
   }
 
@@ -611,19 +616,93 @@ class _ChatScreenState extends State<ChatScreen> {
       _isLoading = true;
     });
 
-    final url = "https://bulk.srivagroups.in/api/messages/${widget.module}/${widget.referenceId}";
     try {
-      final res = await ApiDebugLogger.httpClient.get(Uri.parse(url));
-      if (res.statusCode == 200) {
-        final decoded = jsonDecode(res.body);
-        final loadedMessages = _extractList(decoded);
-
-        setState(() {
-          _messages = loadedMessages;
-        });
-        _scrollToBottom();
+      if (widget.userId != null && widget.userId! > 0) {
+        var omnichannelUrl = "https://receivedchat.srivagroups.in/api/conversations/${widget.userId}";
+        try {
+          print("================== OMNICHANNEL API ==================");
+          print("URL: $omnichannelUrl");
+          final res = await ApiDebugLogger.httpClient.get(Uri.parse(omnichannelUrl)).timeout(const Duration(seconds: 6));
+          print("STATUS CODE: ${res.statusCode}");
+          print("RESPONSE: ${res.body}");
+          print("====================================================");
+          
+          if (res.statusCode == 200) {
+            final decoded = jsonDecode(res.body);
+            final dataObj = decoded['data'];
+            List<dynamic> loadedMessages = [];
+            if (dataObj != null && dataObj['messages'] != null) {
+               loadedMessages = dataObj['messages'];
+            }
+            loadedMessages.sort((a, b) {
+              final timeA = DateTime.tryParse((a["timestamp"] ?? a["created_at"] ?? "").toString()) ?? DateTime.fromMillisecondsSinceEpoch(0);
+              final timeB = DateTime.tryParse((b["timestamp"] ?? b["created_at"] ?? "").toString()) ?? DateTime.fromMillisecondsSinceEpoch(0);
+              return timeA.compareTo(timeB);
+            });
+            setState(() {
+              _messages = loadedMessages;
+            });
+            _scrollToBottom();
+            return;
+          }
+        } catch (e) {
+          print("OMNICHANNEL API ERROR: $e");
+        }
       }
-    } catch (_) {
+
+      var url = "https://whatsapp.srivagroups.in/conversation.php?module=${widget.module}&reference_id=${widget.referenceId}";
+      try {
+        print("================== PHP API ==================");
+        print("URL: $url");
+        final res = await ApiDebugLogger.httpClient.get(Uri.parse(url)).timeout(const Duration(seconds: 6));
+        print("STATUS CODE: ${res.statusCode}");
+        print("RESPONSE: ${res.body}");
+        print("=============================================");
+        
+        if (res.statusCode == 200) {
+          final decoded = jsonDecode(res.body);
+          final loadedMessages = _extractList(decoded);
+          loadedMessages.sort((a, b) {
+            final timeA = DateTime.tryParse((a["timestamp"] ?? a["created_at"] ?? "").toString()) ?? DateTime.fromMillisecondsSinceEpoch(0);
+            final timeB = DateTime.tryParse((b["timestamp"] ?? b["created_at"] ?? "").toString()) ?? DateTime.fromMillisecondsSinceEpoch(0);
+            return timeA.compareTo(timeB);
+          });
+          setState(() {
+            _messages = loadedMessages;
+          });
+          _scrollToBottom();
+          return;
+        }
+      } catch (e) {
+        print("PHP API ERROR: $e");
+      }
+
+      // Fallback URL
+      url = "https://bulk.srivagroups.in/api/messages/${widget.module}/${widget.referenceId}";
+      try {
+        print("================== BULK API ==================");
+        print("URL: $url");
+        final res = await ApiDebugLogger.httpClient.get(Uri.parse(url)).timeout(const Duration(seconds: 6));
+        print("STATUS CODE: ${res.statusCode}");
+        print("RESPONSE: ${res.body}");
+        print("==============================================");
+        
+        if (res.statusCode == 200) {
+          final decoded = jsonDecode(res.body);
+          final loadedMessages = _extractList(decoded);
+          loadedMessages.sort((a, b) {
+            final timeA = DateTime.tryParse((a["timestamp"] ?? a["created_at"] ?? "").toString()) ?? DateTime.fromMillisecondsSinceEpoch(0);
+            final timeB = DateTime.tryParse((b["timestamp"] ?? b["created_at"] ?? "").toString()) ?? DateTime.fromMillisecondsSinceEpoch(0);
+            return timeA.compareTo(timeB);
+          });
+          setState(() {
+            _messages = loadedMessages;
+          });
+          _scrollToBottom();
+        }
+      } catch (e) {
+        print("BULK API ERROR: $e");
+      }
     } finally {
       setState(() {
         _isLoading = false;
@@ -656,12 +735,13 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     }
 
-    final url = "https://bulk.srivagroups.in/api/messages";
+    final url = "https://whatsapp.srivagroups.in/send.php";
     final body = {
       "module": widget.module,
       "reference_id": widget.referenceId,
       "sender": "admin",
       "message": finalMessage,
+      "phone": widget.userPhone ?? "",
     };
 
     try {

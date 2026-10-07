@@ -23,47 +23,39 @@ import 'package:enquiry_app/services/custom_flow_service.dart';
 import 'package:enquiry_app/utils/sharing_intent_handler.dart';
 
 void main() async {
-  runZoned(() async {
-    WidgetsFlutterBinding.ensureInitialized();
+  WidgetsFlutterBinding.ensureInitialized();
 
-    if (!kDebugMode) {
-      debugPrint = (String? message, {int? wrapWidth}) {};
-    }
+  if (!kDebugMode) {
+    debugPrint = (String? message, {int? wrapWidth}) {};
+  }
 
-    final storageService = await StorageService.getInstance();
-    final secureStorage = await SecureStorageService.getInstance();
-    final apiService = ApiService();
-    final lockRepository = LockRepository(
-      apiService: apiService,
-      secureStorage: secureStorage,
-    );
-    final lockService = LockService(repo: lockRepository);
-    final securityManager = SecurityManager(
-      repository: lockRepository,
-      lockService: lockService,
-    );
+  final storageService = await StorageService.getInstance();
+  final secureStorage = await SecureStorageService.getInstance();
+  final apiService = ApiService();
+  final lockRepository = LockRepository(
+    apiService: apiService,
+    secureStorage: secureStorage,
+  );
+  final lockService = LockService(repo: lockRepository);
+  final securityManager = SecurityManager(
+    repository: lockRepository,
+    lockService: lockService,
+  );
 
-    MobileValidationService.syncUserAppData();
+  MobileValidationService.syncUserAppData();
 
-    runApp(
-      ProviderScope(
-        overrides: [
-          storageServiceProvider.overrideWithValue(storageService),
-          secureStorageServiceProvider.overrideWithValue(secureStorage),
-          lockRepositoryProvider.overrideWithValue(lockRepository),
-          lockServiceProvider.overrideWithValue(lockService),
-          securityManagerProvider.overrideWith((ref) => securityManager),
-        ],
-        child: const CircuitPointApp(),
-      ),
-    );
-  }, zoneSpecification: ZoneSpecification(
-    print: (self, parent, zone, line) {
-      if (kDebugMode) {
-        parent.print(zone, line);
-      }
-    },
-  ));
+  runApp(
+    ProviderScope(
+      overrides: [
+        storageServiceProvider.overrideWithValue(storageService),
+        secureStorageServiceProvider.overrideWithValue(secureStorage),
+        lockRepositoryProvider.overrideWithValue(lockRepository),
+        lockServiceProvider.overrideWithValue(lockService),
+        securityManagerProvider.overrideWith((ref) => securityManager),
+      ],
+      child: const CircuitPointApp(),
+    ),
+  );
 }
 
 class NavigationService {
@@ -111,11 +103,17 @@ class _CircuitPointAppState extends ConsumerState<CircuitPointApp>
 
   void _handleAppResume() async {
     final storageService = ref.read(storageServiceProvider);
-    if (storageService.isLoggedIn) {
+    
+    if (storageService.isLoggedIn && !storageService.isSessionValid) {
+      // Session expired while in background
+      await storageService.clearAuthSession();
+      NavigationService.navigateToLogin();
+    } else if (storageService.isLoggedIn) {
       // App resumed from background - do not show lock screen (only show on cold startup)
     }
 
-    await MobileValidationService.syncUserAppData();
+    // Run sync in background without blocking resume/hot-restart lifecycle
+    unawaited(MobileValidationService.syncUserAppData());
   }
 
   @override

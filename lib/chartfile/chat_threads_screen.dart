@@ -89,12 +89,37 @@ class _ChatThreadsScreenState extends State<ChatThreadsScreen> with SingleTicker
   Future<void> _fetchMessagesFor(String module, int id) async {
     final key = "${module}_$id";
     _isLoadingMessages[key] = true;
-    final url = "https://bulk.srivagroups.in/api/messages/$module/$id";
+    var url = "https://whatsapp.srivagroups.in/conversation.php?module=$module&reference_id=$id";
+    try {
+      final res = await ApiDebugLogger.httpClient.get(Uri.parse(url)).timeout(const Duration(seconds: 5));
+      if (res.statusCode == 200) {
+        final decoded = jsonDecode(res.body);
+        final loadedMessages = _extractList(decoded);
+        loadedMessages.sort((a, b) {
+          final timeA = DateTime.tryParse((a["timestamp"] ?? a["created_at"] ?? "").toString()) ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final timeB = DateTime.tryParse((b["timestamp"] ?? b["created_at"] ?? "").toString()) ?? DateTime.fromMillisecondsSinceEpoch(0);
+          return timeA.compareTo(timeB);
+        });
+        setState(() {
+          _messagesCache[key] = loadedMessages;
+        });
+        _isLoadingMessages[key] = false;
+        if (mounted) setState(() {});
+        return;
+      }
+    } catch (_) {}
+
+    url = "https://bulk.srivagroups.in/api/messages/$module/$id";
     try {
       final res = await ApiDebugLogger.httpClient.get(Uri.parse(url));
       if (res.statusCode == 200) {
         final decoded = jsonDecode(res.body);
         final loadedMessages = _extractList(decoded);
+        loadedMessages.sort((a, b) {
+          final timeA = DateTime.tryParse((a["timestamp"] ?? a["created_at"] ?? "").toString()) ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final timeB = DateTime.tryParse((b["timestamp"] ?? b["created_at"] ?? "").toString()) ?? DateTime.fromMillisecondsSinceEpoch(0);
+          return timeA.compareTo(timeB);
+        });
         setState(() {
           _messagesCache[key] = loadedMessages;
         });
@@ -447,6 +472,8 @@ class _ChatThreadsScreenState extends State<ChatThreadsScreen> with SingleTicker
                 module: module,
                 referenceId: id,
                 userName: name,
+                userPhone: item["mobile"] ?? item["phone"] ?? "",
+                userId: item["user_id"] != null ? int.tryParse(item["user_id"].toString()) : null,
               ),
             ),
           );

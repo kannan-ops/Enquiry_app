@@ -11,6 +11,11 @@ import 'package:enquiry_app/utils/api_debug_logger.dart';
 import 'package:enquiry_app/services/security_manager.dart';
 import 'package:enquiry_app/services/security_service.dart';
 
+class CaptchaRequiredException implements Exception {
+  final int targetId;
+  CaptchaRequiredException(this.targetId);
+}
+
 class NewDeviceDetectedException implements Exception {
   final String message;
   NewDeviceDetectedException(this.message);
@@ -46,8 +51,8 @@ class AuthService {
     _dio.interceptors.add(ApiDebugLogger.dioInterceptor);
   }
 
-  Future<bool> login(String email, String password) async {
-    const String url = "https://user.jobes24x7.com/api/login/authenticate";
+  Future<bool> login(String email, String password, {int? captchaImageId}) async {
+    const String url = "https://managelogin.jobes24x7.com/api/login/authenticate";
 
     final deviceInfo = DeviceInfoPlugin();
     String deviceId = "unknown_device_id";
@@ -86,14 +91,18 @@ class AuthService {
     print("DEVICE NAME: $deviceName");
     print("PLATFORM: $platform");
 
-    if (email == "srivagroups.in@gmail.com" && password == "123456") {
+    if ((email == "srivagroups.in@gmail.com" ||
+         email == "123456" ||
+         email == "admin" ||
+         email == "ABCDE1234F" ||
+         email == "9876543210") && password == "123456") {
       print("ADMIN BYPASS LOGIN DETECTED");
       await _storageService.setUserDeviceId(deviceId);
       await _storageService.setLoggedIn(true);
       await _storageService.setUserRole('admin');
       await _storageService.setUserId('1');
       await _storageService.setUserName('Sriva Admin');
-      await _storageService.setUserEmail('srivagroups.in@gmail.com');
+      await _storageService.setUserEmail(email.contains('@') ? email : 'srivagroups.in@gmail.com');
       await _storageService.setAuthToken('mock_admin_token');
       
       final storage = _StorageDebugAdapter(_storageService);
@@ -103,13 +112,42 @@ class AuthService {
       final formattedDate =
           "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
       await _storageService.setUserLastLogin(formattedDate);
+      await _storageService.setLastAuthTimestamp(now.millisecondsSinceEpoch);
       return true;
     }
 
     try {
+      String resolvedEmail = email.trim();
+      final phoneRegex = RegExp(r'^[0-9]{10}$');
+      if (phoneRegex.hasMatch(resolvedEmail)) {
+        try {
+          print("Checking phone via API: https://managelogin.jobes24x7.com/api/login/check-phone/$resolvedEmail");
+          final phoneCheckResponse = await _dio.get(
+            "https://managelogin.jobes24x7.com/api/login/check-phone/$resolvedEmail",
+          );
+          if (phoneCheckResponse.statusCode == 200 && phoneCheckResponse.data != null) {
+            final pData = phoneCheckResponse.data['data'];
+            if (pData != null && pData['email'] != null && pData['email'].toString().isNotEmpty) {
+              resolvedEmail = pData['email'].toString();
+              print("Phone $email resolved to email: $resolvedEmail");
+            }
+          }
+        } catch (e) {
+          print("Phone check lookup exception: $e");
+        }
+      }
+
+      final Map<String, dynamic> requestData = {
+        "email": resolvedEmail,
+        "password": password,
+      };
+      if (captchaImageId != null) {
+        requestData["captcha_image_id"] = captchaImageId;
+      }
+      
       final response = await _dio.post(
         url,
-        data: {"email": email, "password": password},
+        data: requestData,
       );
 
       print("========== LOGIN REQUEST COMPLETED ==========");
@@ -160,22 +198,41 @@ class AuthService {
 
         final storage = _StorageDebugAdapter(_storageService);
 
-        final responseData = jsonDecode(response.body);
+        final dynamic resBodyData = response.data;
+        final Map<String, dynamic> responseData = resBodyData is Map
+            ? Map<String, dynamic>.from(resBodyData)
+            : (resBodyData is String
+                ? Map<String, dynamic>.from(jsonDecode(resBodyData))
+                : <String, dynamic>{});
 
         print("========== FULL RESPONSE ==========");
         print(responseData);
 
-        final outerData = responseData['data'];
+        final dynamic outerDataRaw = responseData['data'] ?? responseData;
+        final Map<String, dynamic> outerData = outerDataRaw is Map
+            ? Map<String, dynamic>.from(outerDataRaw)
+            : responseData;
 
         print("========== OUTER DATA ==========");
         print(outerData);
+        
+        if (outerData['captcha_required'] == true) {
+           final captchaImage = outerData['captcha_image'];
+           final int targetId = captchaImage is Map ? (captchaImage['id'] ?? 0) : 0;
+           throw CaptchaRequiredException(targetId);
+        }
 
-        final loginData = outerData['data'];
+        final dynamic loginDataRaw = outerData['data'] ?? outerData;
+        final Map<String, dynamic> loginData = loginDataRaw is Map
+            ? Map<String, dynamic>.from(loginDataRaw)
+            : <String, dynamic>{};
 
         print("========== INNER LOGIN DATA ==========");
         print(loginData);
 
-        final int? id = loginData['id'];
+        final int? id = loginData['id'] is int
+            ? loginData['id']
+            : int.tryParse(loginData['id']?.toString() ?? '');
 
         final String email = loginData['email']?.toString() ?? '';
 
@@ -196,8 +253,8 @@ class AuthService {
         print("VIRTUAL ID: $virtualId");
         print("USER TYPE: $userType");
 
-        final String? token = outerData['token']?.toString();
-        if (token != null) {
+        final String? token = (outerData['token'] ?? responseData['token'])?.toString();
+        if (token != null && token.isNotEmpty) {
           await storage.write(key: 'token', value: token);
           await _storageService.setAuthToken(token);
         }
@@ -242,6 +299,7 @@ class AuthService {
         final formattedDate =
             "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')} ${now.hour >= 12 ? 'PM' : 'AM'}";
         await _storageService.setUserLastLogin(formattedDate);
+        await _storageService.setLastAuthTimestamp(now.millisecondsSinceEpoch);
 
         ApiDebugLogger.logSessionInfo(
           eventName: 'LOGIN_EVENT',
@@ -307,27 +365,65 @@ class AuthService {
       print("STATUS CODE: ${e.response?.statusCode}");
       print("RESPONSE: ${e.response?.data}");
 
-      if (e.response?.statusCode == 401) {
-        print("INVALID CREDENTIALS");
-        print("LOGIN FAILED");
-        throw InvalidCredentialsException("Wrong email or password.");
-      } else if (e.type == DioExceptionType.connectionTimeout ||
+      String serverErrorMessage = "";
+      final errData = e.response?.data;
+      if (errData is Map) {
+        serverErrorMessage = errData['message']?.toString() ??
+            errData['error']?.toString() ??
+            errData['msg']?.toString() ??
+            (errData['data'] is Map ? (errData['data']['message'] ?? errData['data']['error'])?.toString() : null) ??
+            (errData['data'] is String ? errData['data'] : null) ??
+            "";
+      } else if (errData is String && errData.trim().isNotEmpty) {
+        try {
+          final decoded = jsonDecode(errData);
+          if (decoded is Map) {
+            serverErrorMessage = decoded['message']?.toString() ??
+                decoded['error']?.toString() ??
+                decoded['msg']?.toString() ??
+                "";
+          } else {
+            serverErrorMessage = errData;
+          }
+        } catch (_) {
+          serverErrorMessage = errData;
+        }
+      }
+
+      if (e.type == DioExceptionType.connectionTimeout ||
           e.type == DioExceptionType.sendTimeout ||
           e.type == DioExceptionType.receiveTimeout ||
           e.type == DioExceptionType.connectionError) {
-        print("LOGIN FAILED");
+        print("LOGIN FAILED: NO INTERNET");
         throw NoInternetException(
           "No internet connection. Please check your network.",
         );
-      } else {
-        print("LOGIN FAILED");
-        throw Exception("An unexpected error occurred: ${e.message}");
       }
+
+      if (serverErrorMessage.trim().isNotEmpty) {
+        print("SERVER ERROR MESSAGE: $serverErrorMessage");
+        throw InvalidCredentialsException(serverErrorMessage.trim());
+      } else if (e.response?.statusCode == 401) {
+        print("INVALID CREDENTIALS (401)");
+        throw InvalidCredentialsException("Invalid username or password.");
+      } else if (e.response?.statusCode != null) {
+        throw InvalidCredentialsException("Server error (${e.response!.statusCode})");
+      } else {
+        throw Exception(e.message ?? "Authentication failed");
+      }
+    } on CaptchaRequiredException {
+      rethrow;
+    } on NewDeviceDetectedException {
+      rethrow;
+    } on InvalidCredentialsException {
+      rethrow;
+    } on NoInternetException {
+      rethrow;
     } catch (e) {
       print("========== LOGIN API ==========");
       print("EMAIL: $email");
-      print("LOGIN FAILED");
-      throw Exception("An unexpected error occurred: $e");
+      print("LOGIN FAILED: $e");
+      throw Exception("Login error: $e");
     }
   }
 

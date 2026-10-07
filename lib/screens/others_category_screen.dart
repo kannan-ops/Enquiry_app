@@ -158,17 +158,26 @@ class _OthersCategoryScreenState extends ConsumerState<OthersCategoryScreen> {
         i + chunkSize > allItems.length ? allItems.length : i + chunkSize,
       );
 
-      await Future.wait(chunk.map((item) async {
+      await Future.wait(chunk.map   ((item) async {
         if (item is! Map) return;
         final id = item["id"] is int ? item["id"] : int.tryParse(item["id"].toString()) ?? 0;
         if (id == 0) return;
 
-        final isOrder = _orders.any((o) => o["id"] == id);
-        final isEnq = _enquiries.any((e) => e["id"] == id);
-        final module = isOrder ? "bulk" : (isEnq ? "enq" : "sector");
-        final url = "https://bulk.srivagroups.in/api/messages/$module/$id";
         try {
-          final res = await ApiDebugLogger.httpClient.get(Uri.parse(url)).timeout(const Duration(seconds: 4));
+          final isOrder = _orders.any((o) => o["id"] == id);
+          final isEnq = _enquiries.any((e) => e["id"] == id);
+          final module = isOrder ? "bulk_order" : (isEnq ? "enquiry" : "product");
+          var url = "https://whatsapp.srivagroups.in/conversation.php?module=$module&reference_id=$id";
+          var res;
+          try {
+            res = await ApiDebugLogger.httpClient.get(Uri.parse(url)).timeout(const Duration(seconds: 4));
+            if (res.statusCode != 200) {
+              throw Exception("Not 200");
+            }
+          } catch (_) {
+            url = "https://bulk.srivagroups.in/api/messages/$module/$id";
+            res = await ApiDebugLogger.httpClient.get(Uri.parse(url)).timeout(const Duration(seconds: 4));
+          }
           if (res.statusCode == 200) {
             final decoded = jsonDecode(res.body);
             List<dynamic> msgs = [];
@@ -761,18 +770,39 @@ class _OthersCategoryScreenState extends ConsumerState<OthersCategoryScreen> {
                                                 ),
                                               ),
                                             ),
-                                          Container(
-                                            padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.h),
-                                            decoration: BoxDecoration(
-                                              color: statusColor.withOpacity(0.12),
-                                              borderRadius: BorderRadius.circular(8.r),
-                                            ),
-                                            child: Text(
-                                              statusLabel.toUpperCase(),
-                                              style: GoogleFonts.outfit(
-                                                fontSize: 9.sp,
-                                                fontWeight: FontWeight.w800,
-                                                color: statusColor,
+                                          GestureDetector(
+                                            onTap: () {
+                                              final phone = item["phone"] ?? item["mobile"] ?? "";
+                                              String moduleStr = "enquiry";
+                                              if (_activeTab == "sectors") moduleStr = "sector";
+                                              if (_activeTab == "bulk") moduleStr = "bulk_order";
+                                              
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) => ChatScreen(
+                                                    referenceId: id,
+                                                    module: moduleStr,
+                                                    userName: name,
+                                                    userPhone: phone,
+                                                    userId: item["user_id"] != null ? int.tryParse(item["user_id"].toString()) : null,
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                            child: Container(
+                                              padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.h),
+                                              decoration: BoxDecoration(
+                                                color: statusColor.withOpacity(0.12),
+                                                borderRadius: BorderRadius.circular(8.r),
+                                              ),
+                                              child: Text(
+                                                statusLabel.toUpperCase(),
+                                                style: GoogleFonts.outfit(
+                                                  fontSize: 9.sp,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: statusColor,
+                                                ),
                                               ),
                                             ),
                                           ),

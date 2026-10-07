@@ -11,6 +11,7 @@ import 'package:enquiry_app/theme/theme_provider.dart';
 import 'package:enquiry_app/utils/constants.dart';
 import 'package:enquiry_app/screens/login_screen.dart';
 import 'package:enquiry_app/screens/two_step_auth_settings_screen.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   final bool isStandalone;
@@ -28,6 +29,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _notificationSoundEnabled = true;
   String _selectedLanguage = 'English';
   bool _autoSync = true;
+  String _appVersion = 'Loading...';
 
   @override
   void initState() {
@@ -47,6 +49,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _selectedLanguage = _storageService.language;
       _autoSync = _storageService.autoSync;
     });
+    _loadAppVersion();
+  }
+
+  Future<void> _loadAppVersion() async {
+    try {
+      final packageInfo = await PackageInfo.fromPlatform();
+      if (mounted) {
+        setState(() {
+          _appVersion = '${packageInfo.version}+${packageInfo.buildNumber}';
+        });
+      }
+    } catch (e) {
+      print("Error loading app version: $e");
+      if (mounted) {
+        setState(() {
+          _appVersion = 'Unknown';
+        });
+      }
+    }
   }
 
   void _toggleNotifications(bool value) async {
@@ -565,7 +586,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         ),
                       ),
                       trailing: Text(
-                        'v3.5.2-RELEASE',
+                        _appVersion,
                         style: GoogleFonts.outfit(
                           color: Theme.of(context).colorScheme.primary,
                           fontWeight: FontWeight.bold,

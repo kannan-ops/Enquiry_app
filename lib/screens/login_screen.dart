@@ -31,6 +31,8 @@ import 'dart:convert';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:enquiry_app/new_account/screens/create_account_screen.dart';
+import 'package:enquiry_app/widgets/captcha_dialog.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   final String? redirectModule;
@@ -50,10 +52,58 @@ class LoginScreen extends ConsumerStatefulWidget {
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
+enum LoginOption {
+  email(
+    title: 'Email id',
+    fieldLabel: 'Email Address',
+    hintText: 'srivagroups.in@gmail.com',
+    icon: Icons.mail_outline_rounded,
+    keyboardType: TextInputType.emailAddress,
+  ),
+  phone(
+    title: 'Phone',
+    fieldLabel: 'Phone Number',
+    hintText: 'Enter 10-digit mobile number',
+    icon: Icons.phone_outlined,
+    keyboardType: TextInputType.phone,
+  ),
+  userId(
+    title: 'User Id',
+    fieldLabel: 'User Id',
+    hintText: 'Enter your User ID',
+    icon: Icons.person_outline_rounded,
+    keyboardType: TextInputType.text,
+  ),
+  pan(
+    title: 'Pan number',
+    fieldLabel: 'Pan Number',
+    hintText: 'Enter PAN (e.g. ABCDE1234F)',
+    icon: Icons.credit_card_outlined,
+    keyboardType: TextInputType.text,
+  );
+
+  final String title;
+  final String fieldLabel;
+  final String hintText;
+  final IconData icon;
+  final TextInputType keyboardType;
+
+  const LoginOption({
+    required this.title,
+    required this.fieldLabel,
+    required this.hintText,
+    required this.icon,
+    required this.keyboardType,
+  });
+}
+
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+
+  LoginOption _selectedLoginOption = LoginOption.pan;
+  bool _isLoginTypeDropdownOpen = false;
 
   bool _obscurePassword = true;
   bool _isLoading = false;
@@ -547,7 +597,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   void _handleLogin() async {
     if (_isLoggingIn) return;
     if (!_formKey.currentState!.validate()) return;
+    
+    // Hide keyboard
+    FocusScope.of(context).unfocus();
 
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => CaptchaDialog(
+        onVerify: (int targetId) {
+          _executeLogin(captchaImageId: targetId);
+        },
+      ),
+    );
+  }
+
+
+  void _executeLogin({int? captchaImageId}) async {
     setState(() {
       _isLoading = true;
       _isLoggingIn = true;
@@ -563,7 +629,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     try {
       SecurityService.resetSessionHistoryState();
 
-      final success = await authService.login(email, password);
+      final success = await authService.login(email, password, captchaImageId: captchaImageId);
 
       if (!mounted) return;
 
@@ -708,6 +774,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           'Invalid credentials. Check Email & Password.',
         );
       }
+    } on CaptchaRequiredException catch (e) {
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => CaptchaDialog(
+          targetId: e.targetId,
+          onVerify: (int targetId) {
+            _executeLogin(captchaImageId: targetId);
+          },
+        ),
+      );
     } on NewDeviceDetectedException {
       if (!mounted) return;
       _showErrorSnackBar(
@@ -726,15 +804,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       });
     } on InvalidCredentialsException catch (e) {
       if (!mounted) return;
-      _showErrorSnackBar('Access Denied', e.message);
+      _showErrorSnackBar('Login Failed', e.message);
     } on NoInternetException catch (e) {
       if (!mounted) return;
       _showErrorSnackBar('Connection Failure', e.message);
     } catch (e) {
       if (!mounted) return;
       _showErrorSnackBar(
-        'Verification Error',
-        e.toString().replaceAll('Exception: ', ''),
+        'Login Error',
+        e.toString().replaceAll('Exception: ', '').replaceAll('Login error: ', ''),
       );
     } finally {
       if (mounted) {
@@ -789,6 +867,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   void _autofillCredentials() {
     setState(() {
+      _selectedLoginOption = LoginOption.email;
+      _isLoginTypeDropdownOpen = false;
       _emailController.text = 'srivagroups.in@gmail.com';
       _passwordController.text = '123456';
     });
@@ -1740,7 +1820,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       setState(() {
         _isLoading = false;
       });
-      _showErrorSnackBar('Access Denied', e.message);
+      _showErrorSnackBar('Login Failed', e.message);
     } on NoInternetException catch (e) {
       print("DEBUG [LoginScreen]: NoInternetException caught: $e");
       if (!mounted) return;
@@ -1757,8 +1837,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         _isLoading = false;
       });
       _showErrorSnackBar(
-        'Verification Error',
-        e.toString().replaceAll('Exception: ', ''),
+        'Login Error',
+        e.toString().replaceAll('Exception: ', '').replaceAll('Login error: ', ''),
       );
     }
   }
@@ -1866,37 +1946,216 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             Text(
-                              'VERIFY IDENTITY',
+                              'LOGIN WITH',
                               style: GoogleFonts.outfit(
-                                fontSize: 11.sp,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 1.5,
-                                color: Theme.of(context).colorScheme.primary,
+                                fontSize: 12.sp,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 1.2,
+                                color: isDarkMode
+                                    ? Colors.white70
+                                    : const Color(0xFF64748B),
                               ),
                             ),
+                            SizedBox(height: 10.h),
+
+                            // Main Selector Box
+                            InkWell(
+                              onTap: () {
+                                setState(() {
+                                  _isLoginTypeDropdownOpen = !_isLoginTypeDropdownOpen;
+                                });
+                              },
+                              borderRadius: BorderRadius.circular(14.r),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 16.w,
+                                  vertical: 14.h,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).colorScheme.surface,
+                                  borderRadius: BorderRadius.circular(14.r),
+                                  border: Border.all(
+                                    color: const Color(0xFF6366F1),
+                                    width: 1.8,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(0xFF6366F1).withOpacity(0.08),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      _selectedLoginOption.icon,
+                                      size: 22.sp,
+                                      color: const Color(0xFF6366F1),
+                                    ),
+                                    SizedBox(width: 14.w),
+                                    Expanded(
+                                      child: Text(
+                                        _selectedLoginOption.title,
+                                        style: GoogleFonts.outfit(
+                                          fontSize: 16.sp,
+                                          fontWeight: FontWeight.w700,
+                                          color: Theme.of(context).colorScheme.onSurface,
+                                        ),
+                                      ),
+                                    ),
+                                    Icon(
+                                      _isLoginTypeDropdownOpen
+                                          ? Icons.keyboard_arrow_up_rounded
+                                          : Icons.keyboard_arrow_down_rounded,
+                                      size: 24.sp,
+                                      color: const Color(0xFF6366F1),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+
+                            // Dropdown Options Menu
+                            if (_isLoginTypeDropdownOpen) ...[
+                              SizedBox(height: 8.h),
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).colorScheme.surface,
+                                  borderRadius: BorderRadius.circular(16.r),
+                                  border: Border.all(
+                                    color: isDarkMode
+                                        ? Colors.white12
+                                        : const Color(0xFFE2E8F0),
+                                    width: 1.2,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.06),
+                                      blurRadius: 16,
+                                      offset: const Offset(0, 6),
+                                    ),
+                                  ],
+                                ),
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 8.w,
+                                  vertical: 8.h,
+                                ),
+                                child: Column(
+                                  children: LoginOption.values.map((option) {
+                                    final bool isSelected = _selectedLoginOption == option;
+                                    return Padding(
+                                      padding: EdgeInsets.symmetric(vertical: 2.h),
+                                      child: InkWell(
+                                        onTap: () {
+                                          setState(() {
+                                            _selectedLoginOption = option;
+                                            _isLoginTypeDropdownOpen = false;
+                                            _emailController.clear();
+                                          });
+                                        },
+                                        borderRadius: BorderRadius.circular(12.r),
+                                        child: AnimatedContainer(
+                                          duration: const Duration(milliseconds: 150),
+                                          padding: EdgeInsets.symmetric(
+                                            horizontal: 14.w,
+                                            vertical: 12.h,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: isSelected
+                                                ? (isDarkMode
+                                                    ? const Color(0xFF6366F1).withOpacity(0.2)
+                                                    : const Color(0xFFEDE9FE))
+                                                : Colors.transparent,
+                                            borderRadius: BorderRadius.circular(12.r),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                option.icon,
+                                                size: 20.sp,
+                                                color: isSelected
+                                                    ? const Color(0xFF6366F1)
+                                                    : Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+                                              ),
+                                              SizedBox(width: 14.w),
+                                              Expanded(
+                                                child: Text(
+                                                  option.title,
+                                                  style: GoogleFonts.outfit(
+                                                    fontSize: 15.sp,
+                                                    fontWeight: isSelected
+                                                        ? FontWeight.w700
+                                                        : FontWeight.w500,
+                                                    color: isSelected
+                                                        ? const Color(0xFF6366F1)
+                                                        : Theme.of(context).colorScheme.onSurface,
+                                                  ),
+                                                ),
+                                              ),
+                                              if (isSelected)
+                                                Icon(
+                                                  Icons.check_rounded,
+                                                  size: 20.sp,
+                                                  color: const Color(0xFF6366F1),
+                                                ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              ),
+                            ],
+
                             SizedBox(height: 20.h),
 
                             TextFormField(
                               controller: _emailController,
-                              keyboardType: TextInputType.emailAddress,
+                              keyboardType: _selectedLoginOption.keyboardType,
+                              textCapitalization: _selectedLoginOption == LoginOption.pan
+                                  ? TextCapitalization.characters
+                                  : TextCapitalization.none,
                               decoration: InputDecoration(
                                 prefixIcon: Icon(
-                                  Icons.alternate_email_rounded,
+                                  _selectedLoginOption.icon,
                                   size: 20.w,
                                   color: Theme.of(
                                     context,
                                   ).colorScheme.primary.withOpacity(0.7),
                                 ),
-                                labelText: 'Email Address',
-                                hintText: 'srivagroups.in@gmail.com',
+                                labelText: _selectedLoginOption.fieldLabel,
+                                hintText: _selectedLoginOption.hintText,
                               ),
                               validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Email is required';
+                                if (value == null || value.trim().isEmpty) {
+                                  return '${_selectedLoginOption.fieldLabel} is required';
                                 }
-                                if (!value.contains('@') ||
-                                    !value.contains('.')) {
-                                  return 'Enter a valid email address';
+                                final text = value.trim();
+                                switch (_selectedLoginOption) {
+                                  case LoginOption.email:
+                                    if (!text.contains('@') ||
+                                        !text.contains('.')) {
+                                      return 'Enter a valid email address';
+                                    }
+                                    break;
+                                  case LoginOption.phone:
+                                    if (text.length < 10) {
+                                      return 'Enter a valid 10-digit phone number';
+                                    }
+                                    break;
+                                  case LoginOption.pan:
+                                    if (text.length != 10) {
+                                      return 'Enter a valid 10-character PAN number';
+                                    }
+                                    break;
+                                  case LoginOption.userId:
+                                    if (text.length < 2) {
+                                      return 'Enter a valid User ID';
+                                    }
+                                    break;
                                 }
                                 return null;
                               },
@@ -2116,6 +2375,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   ),
                                 ),
                               ],
+                            ),
+                            SizedBox(height: 12.h),
+                            TextButton(
+                              onPressed: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (context) => const CreateAccountScreen(),
+                                  ),
+                                );
+                              },
+                              style: TextButton.styleFrom(
+                                padding: EdgeInsets.symmetric(vertical: 8.h),
+                              ),
+                              child: Text(
+                                "Create New Account",
+                                style: GoogleFonts.outfit(
+                                  fontSize: 15.sp,
+                                  fontWeight: FontWeight.bold,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                              ),
                             ),
                           ],
                         ),

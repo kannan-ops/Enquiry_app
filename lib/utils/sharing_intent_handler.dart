@@ -7,7 +7,7 @@ import 'package:enquiry_app/chartfile/chat_screen.dart';
 import 'package:enquiry_app/main.dart';
 
 class SharingIntentHandler {
-  static const _channel = MethodChannel('com.srivagroups.enquiry/share');
+  static const _channel = MethodChannel('com.circuitpoint.enquiry/share');
   static List<String>? pendingSharedFiles;
   static String? pendingSharedText;
 
