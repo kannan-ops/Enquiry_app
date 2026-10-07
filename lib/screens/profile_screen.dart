@@ -14,9 +14,7 @@ import 'package:enquiry_app/services/storage_service.dart';
 import 'package:enquiry_app/theme/theme_provider.dart';
 import 'package:enquiry_app/theme/app_theme.dart';
 import 'package:enquiry_app/utils/constants.dart';
-import 'package:enquiry_app/screens/login_screen.dart';
 import 'package:enquiry_app/screens/settings_screen.dart';
-import 'package:enquiry_app/screens/security_screen.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -176,23 +174,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
   }
 
-  Future<void> logout(BuildContext context) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('auth_token');
-    await _storageService.clearAuthSession();
-    await ApiDebugLogger.logSessionInfo(
-      eventName: 'LOGOUT_EVENT',
-      sessionStatus: 'INVALID',
-    );
 
-    if (context.mounted) {
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const LoginScreen()),
-        (route) => false,
-      );
-    }
-  }
 
   Widget _buildDetailTile(IconData icon, String label, String value) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
@@ -493,58 +475,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
                 SizedBox(height: 8.h),
 
-                Card(
-                  child: InkWell(
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) => const SecurityScreen(),
-                        ),
-                      );
-                    },
-                    borderRadius: BorderRadius.circular(20),
-                    child: Padding(
-                      padding: EdgeInsets.all(14.r),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.shield_rounded,
-                            color: Colors.indigoAccent,
-                            size: 22.w,
-                          ),
-                          SizedBox(width: 14.w),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Password & Security',
-                                  style: GoogleFonts.outfit(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13.sp,
-                                  ),
-                                ),
-                                Text(
-                                  'Manage hardware PIN, Pattern, or Biometrics',
-                                  style: GoogleFonts.outfit(
-                                    fontSize: 10.sp,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Icon(
-                            Icons.arrow_forward_ios_rounded,
-                            size: 14.w,
-                            color: Colors.grey,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                SizedBox(height: 8.h),
+
 
                 Card(
                   child: InkWell(
@@ -645,28 +576,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ),
                 SizedBox(height: 24.h),
 
-                Card(
-                  color: Colors.redAccent.withOpacity(0.05),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                    side: const BorderSide(color: Colors.redAccent, width: 0.8),
-                  ),
-                  child: ListTile(
-                    leading: const Icon(Icons.logout, color: Colors.redAccent),
-                    title: Text(
-                      "Terminate Clearance Session",
-                      style: GoogleFonts.outfit(
-                        fontSize: 14.sp,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.redAccent,
-                      ),
-                    ),
-                    onTap: () {
-                      logout(context);
-                    },
-                  ),
-                ),
-                SizedBox(height: 24.h),
+
               ],
             ),
           ),

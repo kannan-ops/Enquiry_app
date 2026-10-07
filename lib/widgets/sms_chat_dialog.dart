@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:enquiry_app/services/storage_service.dart';
 import 'package:enquiry_app/providers/riverpod_providers.dart';
 import 'package:enquiry_app/chartfile/chat_screen.dart';
-import 'package:enquiry_app/screens/login_screen.dart';
 
 class SmsChatDialog extends ConsumerStatefulWidget {
   final String phone;
@@ -162,15 +160,14 @@ class _SmsChatDialogState extends ConsumerState<SmsChatDialog> {
       } catch (_) {}
 
       if (!mounted) return;
-      // Navigate to local LoginScreen
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => LoginScreen(
-            redirectModule: widget.module,
-            redirectReferenceId: widget.referenceId,
-            redirectUserName: widget.userName,
-            redirectInitialMessage: messageText,
+          builder: (context) => ChatScreen(
+            referenceId: widget.referenceId,
+            module: widget.module,
+            userName: widget.userName,
+            initialMessage: messageText,
           ),
         ),
       );

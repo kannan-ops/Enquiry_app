@@ -6,7 +6,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:enquiry_app/utils/api_debug_logger.dart';
@@ -199,36 +198,6 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  Future<void> _shareLocation() async {
-    try {
-      final permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Location permission denied")),
-        );
-        return;
-      }
-      final position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
-      final mapsUrl = "https://www.google.com/maps/search/?api=1&query=${position.latitude},${position.longitude}";
-      final id = DateTime.now().millisecondsSinceEpoch.toString();
-      final item = AttachmentItem(
-        id: id,
-        name: "Shared Location",
-        path: mapsUrl,
-        type: 'location',
-        size: "${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)}",
-        status: AttachmentStatus.success,
-        progress: 1.0,
-      );
-      setState(() {
-        _attachments.add(item);
-      });
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Failed to share location: $e")),
-      );
-    }
-  }
 
   void _shareContact() {
     showDialog(
@@ -459,15 +428,6 @@ class _ChatScreenState extends State<ChatScreen> {
                     onTap: () {
                       Navigator.pop(context);
                       _shareContact();
-                    },
-                  ),
-                  _buildAttachmentMenuTile(
-                    icon: Icons.location_on,
-                    label: "Location",
-                    color: Colors.indigo,
-                    onTap: () {
-                      Navigator.pop(context);
-                      _shareLocation();
                     },
                   ),
                 ],

@@ -23,8 +23,6 @@ import 'package:enquiry_app/screens/chats_list_screen.dart';
 
 import 'package:enquiry_app/screens/profile_screen.dart';
 import 'package:enquiry_app/screens/settings_screen.dart';
-import 'package:enquiry_app/screens/security_screen.dart';
-import 'package:enquiry_app/screens/login_screen.dart';
 import 'package:enquiry_app/screens/others_category_screen.dart';
 import 'package:enquiry_app/utils/sharing_intent_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -33,7 +31,6 @@ import 'package:enquiry_app/modules/finance/finance_calculator_hub_screen.dart';
 
 import 'package:enquiry_app/services/storage_service.dart';
 import 'package:enquiry_app/services/auth_service.dart';
-import 'package:enquiry_app/services/biometric_service.dart';
 import 'package:enquiry_app/theme/app_theme.dart';
 import 'package:enquiry_app/utils/constants.dart';
 
@@ -812,175 +809,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     }
   }
 
-  void _showLogoutConfirmation(BuildContext context) {
-    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final storageService = ref.read(storageServiceProvider);
-
-    showDialog(
-      context: context,
-      barrierColor: Colors.black.withOpacity(0.6),
-      builder: (dialogContext) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(28),
-          ),
-          backgroundColor: isDarkMode ? const Color(0xFF151B2C) : Colors.white,
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 24.w, vertical: 28.h),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.redAccent.withOpacity(0.12),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.logout_rounded,
-                    size: 38,
-                    color: Colors.redAccent,
-                  ),
-                ),
-                SizedBox(height: 20.h),
-                Text(
-                  'Terminate Session?',
-                  style: GoogleFonts.outfit(
-                    fontSize: 22.sp,
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.onSurface,
-                  ),
-                ),
-                SizedBox(height: 10.h),
-                Text(
-                  'Logging out will end your current secure session clearance. You will need to re-verify credentials next time.',
-                  style: GoogleFonts.outfit(
-                    fontSize: 13.sp,
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withOpacity(0.6),
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                SizedBox(height: 28.h),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: () {
-                          Navigator.pop(dialogContext);
-                        },
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          side: BorderSide(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurface.withOpacity(0.15),
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        child: Text(
-                          'Stay Secure',
-                          style: GoogleFonts.outfit(
-                            fontWeight: FontWeight.bold,
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
-                        ),
-                      ),
-                    ),
-                    SizedBox(width: 12.w),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () async {
-                          final scaffoldMessenger = ScaffoldMessenger.of(
-                            context,
-                          );
-                          final biometricService = ref.read(biometricServiceProvider);
-                          final authService = ref.read(authServiceProvider);
-
-                          Navigator.pop(dialogContext);
-
-                          if (storageService.askBiometricsBeforeLogout) {
-                            final result = await biometricService.authenticate(
-                              reason:
-                                  'Verify identity to authorize session termination',
-                            );
-                            if (!result.success) {
-                              scaffoldMessenger.showSnackBar(
-                                SnackBar(
-                                  content: Row(
-                                    children: [
-                                      const Icon(
-                                        Icons.lock_rounded,
-                                        color: Colors.white,
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Text(
-                                          'Logout Aborted: ${result.message}',
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  backgroundColor: Colors.redAccent,
-                                  behavior: SnackBarBehavior.floating,
-                                ),
-                              );
-                              return;
-                            }
-                          }
-
-                          print("========== LOGOUT DEBUG (BEFORE) ==========");
-                          await authService.logout();
-
-                          final prefsInstance =
-                              await SharedPreferences.getInstance();
-                          await prefsInstance.remove('auth_token');
-
-                          print("========== LOGOUT DEBUG ==========");
-                          print("TOKEN REMOVED");
-                          print("USER LOGGED OUT");
-                          print("NAVIGATING TO LOGIN PAGE");
-                          print("=================================");
-
-                          if (!mounted) return;
-
-                          Navigator.pushAndRemoveUntil(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const LoginScreen(),
-                            ),
-                            (route) => false,
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.redAccent,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        child: Text(
-                          'End Session',
-                          style: GoogleFonts.outfit(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
+  void _showLogoutConfirmation(BuildContext context) {}
 
   @override
   Widget build(BuildContext context) {
@@ -1219,46 +1048,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     ),
                   );
                   _loadData();
-                },
-              ),
-
-              ListTile(
-                leading: Icon(
-                  Icons.lock_outline_rounded,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-                title: Text(
-                  "Lock Screen Options",
-                  style: GoogleFonts.outfit(fontWeight: FontWeight.w600),
-                ),
-                onTap: () async {
-                  Navigator.pop(context);
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const SecurityScreen(),
-                    ),
-                  );
-                },
-              ),
-
-              const Divider(),
-
-              ListTile(
-                leading: const Icon(
-                  Icons.logout_rounded,
-                  color: Colors.redAccent,
-                ),
-                title: Text(
-                  "Logout",
-                  style: GoogleFonts.outfit(
-                    color: Colors.redAccent,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showLogoutConfirmation(context);
                 },
               ),
               SizedBox(height: 20.h),
@@ -1683,7 +1472,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             onTap: () {
                               Navigator.push(
                                 context,
-                                MaterialPageRoute(builder: (_) => const SecurityScreen()),
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      const SettingsScreen(isStandalone: true),
+                                ),
                               );
                             },
                             child: Container(
@@ -1705,10 +1497,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Icon(Icons.security_rounded, size: 18.r, color: const Color(0xFFF59E0B)),
+                                  Icon(Icons.settings_suggest_rounded, size: 18.r, color: const Color(0xFFF59E0B)),
                                   SizedBox(width: 8.w),
                                   Text(
-                                    "Security Setup",
+                                    "Settings",
                                     style: GoogleFonts.outfit(
                                       fontSize: 12.sp,
                                       fontWeight: FontWeight.bold,
